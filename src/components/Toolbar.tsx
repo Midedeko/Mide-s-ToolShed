@@ -12,11 +12,17 @@ interface ToolbarProps {
     setUnit: (unit: Unit) => void;
     onClear: () => void;
     onSave: () => void;
-    isSaving: boolean;
+    onExport: () => void;
+    onImport: (file: File) => void;
     shareLink: string | null;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMapStyle, unit, setUnit, onClear, onSave, isSaving, shareLink }) => {
+const Toolbar: React.FC<ToolbarProps> = ({
+    currentMode, setMode, mapStyle, setMapStyle,
+    unit, setUnit, onClear, onSave, onExport, onImport, shareLink
+}) => {
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
+
     const toggleStyle = () => {
         setMapStyle(
             mapStyle === 'mapbox://styles/mapbox/dark-v11'
@@ -25,8 +31,27 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMa
         );
     };
 
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            onImport(file);
+        }
+    };
+
     return (
         <div className="toolbar">
+            <input
+                type="file"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                accept=".json"
+                onChange={handleFileChange}
+            />
+
             <button
                 className={currentMode === 'ruler' ? 'active' : ''}
                 onClick={() => setMode(currentMode === 'ruler' ? 'none' : 'ruler')}
@@ -65,12 +90,16 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMa
 
             <div className="vertical-divider"></div>
 
-            <button
-                onClick={onSave}
-                disabled={isSaving}
-                className={isSaving ? 'loading' : ''}
-            >
-                <span className="icon">{isSaving ? '⌛' : '💾'}</span> {isSaving ? 'Saving...' : 'Save Plan'}
+            <button onClick={onSave} title="Save to History">
+                <span className="icon">💾</span> Save
+            </button>
+
+            <button onClick={onExport} title="Download as File">
+                <span className="icon">📥</span> Export
+            </button>
+
+            <button onClick={handleImportClick} title="Upload from File">
+                <span className="icon">📤</span> Import
             </button>
 
             {shareLink && (
@@ -79,7 +108,7 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMa
                         navigator.clipboard.writeText(shareLink);
                         alert('Link copied to clipboard!');
                     }}>
-                        <span className="icon">🔗</span> Copy Share Link
+                        <span className="icon">🔗</span> Share Link
                     </button>
                 </div>
             )}

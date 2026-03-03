@@ -362,3 +362,98 @@ button.loading {
   opacity: 0.7;
   cursor: wait !important;
 }
+
+/* SidePanel Tabs */
+.panel-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 8px;
+}
+
+.panel-tabs button {
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.panel-tabs button:hover {
+  color: white;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.panel-tabs button.active {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+
+.tab-content h3 {
+  margin-top: 0;
+  font-size: 1.1rem;
+  color: #38bdf8;
+  margin-bottom: 16px;
+}
+
+/* Saved Plans List */
+.plans-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.plan-item {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.plan-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(56, 189, 248, 0.4);
+  transform: translateY(-2px);
+}
+
+.plan-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.plan-info strong {
+  font-size: 0.95rem;
+  color: white;
+}
+
+.plan-info span {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.load-btn {
+  background: #38bdf8;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.load-btn:hover {
+  background: #0ea5e9;
+}

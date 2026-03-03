@@ -31,6 +31,7 @@ const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
 
   const formatDistance = (meters: number) => {
@@ -175,6 +176,15 @@ const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle
       reverseGeocode: true
     });
 
+    geocoder.on('result', (e) => {
+      const coords = e.result.center as [number, number];
+      if (searchMarkerRef.current) searchMarkerRef.current.remove();
+      searchMarkerRef.current = new mapboxgl.Marker({ color: '#ff0000' })
+        .setLngLat(coords)
+        .addTo(map);
+      map.flyTo({ center: coords, zoom: 15 });
+    });
+
     setTimeout(() => {
       const dock = document.getElementById('geocoder-dock');
       if (dock) {
@@ -300,6 +310,13 @@ const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle
     measurementSource.setData({ type: 'FeatureCollection', features });
     areaSource.setData({ type: 'FeatureCollection', features: areaFeatures });
 
+    // Auto-center on initial load if clicks exist
+    if (clicks.length > 0 && mapRef.current && !mapRef.current.isMoving()) {
+      const bounds = new mapboxgl.LngLatBounds();
+      clicks.forEach(c => bounds.extend(c));
+      mapRef.current.fitBounds(bounds, { padding: 50, maxZoom: 18, animate: true });
+    }
+
   }, [clicks, unit, mapStyle, onRulerResult, onPolygonResult]);
 
   useEffect(() => {
@@ -308,6 +325,7 @@ const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle
     const handleClick = (e: mapboxgl.MapMouseEvent) => {
       setContextMenu(null);
       if (mode === 'none') return;
+
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       setClicks(prev => {
         if (mode === 'ruler') return prev.length >= 2 ? [point] : [...prev, point];

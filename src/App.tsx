@@ -1,11 +1,18 @@
 import { useState, useCallback, useEffect } from 'react';
+import LZString from 'lz-string';
 import './App.css';
 import Map from './components/Map.tsx';
 import Toolbar from './components/Toolbar.tsx';
 import SidePanel from './components/SidePanel.tsx';
-import { supabase } from './lib/supabase.ts';
 
 type Mode = 'none' | 'ruler' | 'polygon';
+
+interface SavedPlan {
+  id: string;
+  name: string;
+  data: any;
+  created_at: string;
+}
 
 function App() {
   const [mode, setMode] = useState<Mode>('none');
@@ -21,77 +28,128 @@ function App() {
   const [rulerResult, setRulerResult] = useState<{ distanceMeters: number; pointA: [number, number]; pointB: [number, number] } | null>(null);
   const [polygonResult, setPolygonResult] = useState<{ areaSqMeters: number; vertices: [number, number][] } | null>(null);
   const [clicks, setClicks] = useState<[number, number][]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [planName, setPlanName] = useState<string>('Unnamed Plan');
   const [shareLink, setShareLink] = useState<string | null>(null);
+  const [historyVersion, setHistoryVersion] = useState(0); // Used to trigger SidePanel refresh
 
-  // Load plan from URL if ID is present
+  // Load plan from URL if Search String is present
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const planId = urlParams.get('plan');
-    if (planId) {
-      loadPlan(planId);
+    const encodedData = urlParams.get('s');
+
+    if (encodedData) {
+      loadFromEncodedString(encodedData);
     }
   }, []);
 
-  const loadPlan = async (id: string) => {
-    const { data, error } = await supabase
-      .from('site_plans')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      console.error('Error loading plan:', error);
-      return;
-    }
-
-    if (data) {
-      setClicks(data.data.clicks);
-      setUnit(data.data.unit || 'ft');
-      setMapStyle(data.data.mapStyle || 'mapbox://styles/mapbox/dark-v11');
-      if (data.data.siteStyle) setSiteStyle(data.data.siteStyle);
+  const loadFromEncodedString = (encoded: string) => {
+    try {
+      const decoded = LZString.decompressFromEncodedURIComponent(encoded);
+      if (!decoded) return;
+      const data = JSON.parse(decoded);
+      applyPlanData(data);
       setShareLink(window.location.href);
+    } catch (e) {
+      console.error('Failed to decode data from URL', e);
     }
   };
 
-  const handleSave = async () => {
+  const applyPlanData = (data: any) => {
+    if (data.clicks) setClicks(data.clicks);
+    if (data.unit) setUnit(data.unit);
+    if (data.mapStyle) setMapStyle(data.mapStyle);
+    if (data.siteStyle) setSiteStyle(data.siteStyle);
+    if (data.name) setPlanName(data.name);
+  };
+
+  const handleSave = () => {
     if (clicks.length === 0) {
       alert('Please add some points to the map before saving.');
       return;
     }
 
-    setIsSaving(true);
+    const namePrompt = window.prompt("What would you like to call this site layout?", planName);
+    const finalName = namePrompt || planName;
+    if (namePrompt) setPlanName(namePrompt);
+
     const planData = {
       clicks,
       unit,
       mapStyle,
-      siteStyle
+      siteStyle,
+      name: finalName
     };
 
-    const { data, error } = await supabase
-      .from('site_plans')
-      .insert([{ name: 'Unnamed Plan', data: planData }])
-      .select()
-      .single();
+    // Generate Share Link (URL is self-sufficient)
+    const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(planData));
+    const selfSufficientUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
+    setShareLink(selfSufficientUrl);
+    window.history.pushState({}, '', selfSufficientUrl);
 
-    setIsSaving(false);
-
-    if (error) {
-      console.error('Error saving plan:', error);
-      alert('Failed to save plan: ' + error.message);
-    } else if (data) {
-      const newUrl = `${window.location.origin}${window.location.pathname}?plan=${data.id}`;
-      setShareLink(newUrl);
-      window.history.pushState({}, '', newUrl);
+    // Save to Local Storage History
+    try {
+      const historyStr = localStorage.getItem('site_planner_history') || '[]';
+      const history = JSON.parse(historyStr);
+      const newPlan: SavedPlan = {
+        id: crypto.randomUUID(),
+        name: finalName,
+        data: planData,
+        created_at: new Date().toISOString()
+      };
+      history.unshift(newPlan);
+      localStorage.setItem('site_planner_history', JSON.stringify(history.slice(0, 50))); // Keep last 50
+      setHistoryVersion(v => v + 1); // Trigger SidePanel update
+    } catch (e) {
+      console.error('Failed to save to local storage', e);
     }
   };
 
+  const handleExport = () => {
+    if (clicks.length === 0) return;
+    const planData = {
+      clicks,
+      unit,
+      mapStyle,
+      siteStyle,
+      name: planName,
+      exported_at: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(planData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${planName.replace(/\s+/g, '_')}_plan.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImport = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        applyPlanData(data);
+        alert('Plan imported successfully!');
+      } catch (err) {
+        alert('Failed to parse the plan file.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const loadFromHistory = (plan: SavedPlan) => {
+    applyPlanData(plan.data);
+    const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(plan.data));
+    const newUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
+    setShareLink(newUrl);
+    window.history.pushState({}, '', newUrl);
+  };
   const handleRulerResult = useCallback((distanceMeters: number, pointA: [number, number], pointB: [number, number]) => {
     setRulerResult({ distanceMeters, pointA, pointB });
   }, []);
 
   const handlePolygonResult = useCallback((areaSqMeters: number, vertices: [number, number][]) => {
-    setPolygonResult({ areaSqMeters, vertices });
+    setPolygonResult({ areaSqMeters: areaSqMeters || 0, vertices: vertices || [] });
   }, []);
 
   const handleClear = useCallback(() => {
@@ -114,7 +172,8 @@ function App() {
         setUnit={setUnit}
         onClear={handleClear}
         onSave={handleSave}
-        isSaving={isSaving}
+        onExport={handleExport}
+        onImport={handleImport}
         shareLink={shareLink}
       />
 
@@ -137,6 +196,9 @@ function App() {
         unit={unit}
         isVisible={isPanelVisible}
         onToggleVisible={() => setIsPanelVisible(!isPanelVisible)}
+        onLoadHistory={loadFromHistory}
+        planName={planName}
+        historyVersion={historyVersion}
       />
     </div>
   );
