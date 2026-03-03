@@ -37,6 +37,7 @@ const Map: React.FC<MapProps> = ({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
+  const [isMapLoaded, setIsMapLoaded] = useState(false);
 
   const formatDistance = (meters: number) => {
     switch (unit) {
@@ -204,6 +205,10 @@ const Map: React.FC<MapProps> = ({
 
     map.on('zoom', () => updateFog(map));
 
+    map.on('load', () => {
+      setIsMapLoaded(true);
+    });
+
     mapRef.current = map;
     return () => map.remove();
   }, []);
@@ -318,12 +323,12 @@ const Map: React.FC<MapProps> = ({
   // Explicit Auto-Transport (Zoom to Site)
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || clicks.length === 0 || zoomTrigger === 0) return;
+    if (!map || !isMapLoaded || clicks.length === 0 || zoomTrigger === 0) return;
 
     const bounds = new mapboxgl.LngLatBounds();
     clicks.forEach(c => bounds.extend(c));
-    map.fitBounds(bounds, { padding: 100, maxZoom: 18, animate: true });
-  }, [zoomTrigger]);
+    map.fitBounds(bounds, { padding: 100, maxZoom: 18, animate: true, duration: 1500 });
+  }, [zoomTrigger, isMapLoaded]);
 
   useEffect(() => {
     const map = mapRef.current;
