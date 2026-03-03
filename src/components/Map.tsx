@@ -4,6 +4,7 @@ import MapboxGeocoder from '@mapbox/mapbox-gl-geocoder';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
 import * as turf from '@turf/turf';
+import SunCalc from 'suncalc';
 
 type Mode = 'none' | 'ruler' | 'polygon';
 type Unit = 'mm' | 'cm' | 'inch' | 'ft';
@@ -26,11 +27,16 @@ interface MapProps {
   clicks: [number, number][];
   setClicks: React.Dispatch<React.SetStateAction<[number, number][]>>;
   zoomTrigger: number;
+  timeOfDay: number;
+  showSolar: boolean;
+  showWind: boolean;
+  windData: { dominantDirection: number; speed: number } | null;
 }
 
 const Map: React.FC<MapProps> = ({
   mode, mapStyle, unit, siteStyle, setSiteStyle,
-  onRulerResult, onPolygonResult, clicks, setClicks, zoomTrigger
+  onRulerResult, onPolygonResult, clicks, setClicks, zoomTrigger,
+  timeOfDay, showSolar, showWind, windData
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -135,6 +141,52 @@ const Map: React.FC<MapProps> = ({
       e.preventDefault();
       setContextMenu({ x: e.point.x, y: e.point.y });
     });
+
+    // --- Site Analysis Source & Layers ---
+    if (!map.getSource('analysis')) {
+      map.addSource('analysis', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      map.addLayer({
+        id: 'wind-rose',
+        type: 'fill',
+        source: 'analysis',
+        filter: ['==', 'type', 'wind-rose'],
+        paint: {
+          'fill-color': '#38bdf8',
+          'fill-opacity': 0.4,
+          'fill-outline-color': '#0284c7'
+        }
+      });
+
+      map.addLayer({
+        id: 'solar-arc',
+        type: 'line',
+        source: 'analysis',
+        filter: ['==', 'type', 'solar-arc'],
+        paint: {
+          'line-color': '#eab308',
+          'line-width': 2,
+          'line-dasharray': [2, 2],
+        }
+      });
+
+      map.addLayer({
+        id: 'sun-icon',
+        type: 'circle',
+        source: 'analysis',
+        filter: ['==', 'type', 'sun-icon'],
+        paint: {
+          'circle-color': '#fde047',
+          'circle-radius': 8,
+          'circle-stroke-color': '#ca8a04',
+          'circle-stroke-width': 2,
+          'circle-blur': 0.2
+        }
+      });
+    }
   };
 
   const coordinateGeocoder = (query: string) => {
@@ -320,7 +372,97 @@ const Map: React.FC<MapProps> = ({
 
     measurementSource.setData({ type: 'FeatureCollection', features });
     areaSource.setData({ type: 'FeatureCollection', features: areaFeatures });
-  }, [clicks, unit, mapStyle, isMapLoaded, renderTrigger, onRulerResult, onPolygonResult]);
+
+    // Site Analysis Overlay Update
+    const analysisSource = map.getSource('analysis') as mapboxgl.GeoJSONSource;
+    if (analysisSource) {
+      const analysisFeatures: any[] = [];
+
+      if (clicks.length === 4) {
+        const poly = turf.polygon([[...clicks, clicks[0]]]);
+        const centerRef = turf.centroid(poly);
+        const centerPoint = centerRef.geometry.coordinates as [number, number];
+
+        const bbox = turf.bbox(poly);
+        const radiusMeters = Math.max(
+          turf.distance(centerPoint, [bbox[0], bbox[1]], { units: 'meters' }),
+          turf.distance(centerPoint, [bbox[2], bbox[3]], { units: 'meters' })
+        ) * 1.5;
+
+        const date = new Date();
+        const lat = centerPoint[1];
+        const lng = centerPoint[0];
+
+        // 1. Solar Path
+        if (showSolar) {
+          const times = SunCalc.getTimes(date, lat, lng);
+          const sunrise = times.sunrise;
+          const sunset = times.sunset;
+
+          if (sunrise && sunset) {
+            const arcPoints = [];
+            const steps = 30;
+            const startTime = sunrise.getTime();
+            const endTime = sunset.getTime();
+
+            for (let i = 0; i <= steps; i++) {
+              const t = new Date(startTime + (endTime - startTime) * (i / steps));
+              const pos = SunCalc.getPosition(t, lat, lng);
+              // Convert SunCalc azimuth (South=0, clockwise) to Turf bearing (North=0, clockwise)
+              const azimuthDegrees = (pos.azimuth * 180) / Math.PI;
+              const mapBearing = azimuthDegrees + 180;
+
+              const dest = turf.destination(centerPoint, radiusMeters, mapBearing, { units: 'meters' });
+              arcPoints.push(dest.geometry.coordinates);
+            }
+
+            analysisFeatures.push({
+              type: 'Feature',
+              properties: { type: 'solar-arc' },
+              geometry: { type: 'LineString', coordinates: arcPoints }
+            });
+
+            const Math_floor = Math.floor(timeOfDay);
+            const mins = Math.round((timeOfDay - Math_floor) * 60);
+            const sunTime = new Date(date);
+            sunTime.setHours(Math_floor, mins, 0, 0);
+
+            if (sunTime >= sunrise && sunTime <= sunset) {
+              const sunPos = SunCalc.getPosition(sunTime, lat, lng);
+              const sunAzimuthDegrees = (sunPos.azimuth * 180) / Math.PI;
+              const sunMapBearing = sunAzimuthDegrees + 180;
+              const sunDest = turf.destination(centerPoint, radiusMeters, sunMapBearing, { units: 'meters' });
+
+              analysisFeatures.push({
+                type: 'Feature',
+                properties: { type: 'sun-icon' },
+                geometry: sunDest.geometry
+              });
+            }
+          }
+        }
+
+        // 2. Wind Rose Diagram
+        if (showWind && windData) {
+          const windDir = windData.dominantDirection;
+          const wedgePoints: [number, number][] = [centerPoint];
+          for (let d = -15; d <= 15; d += 5) {
+            const dest = turf.destination(centerPoint, radiusMeters * 1.2, windDir + d, { units: 'meters' });
+            wedgePoints.push(dest.geometry.coordinates as [number, number]);
+          }
+          wedgePoints.push(centerPoint);
+
+          analysisFeatures.push({
+            type: 'Feature',
+            properties: { type: 'wind-rose' },
+            geometry: { type: 'Polygon', coordinates: [wedgePoints] }
+          });
+        }
+      }
+
+      analysisSource.setData({ type: 'FeatureCollection', features: analysisFeatures });
+    }
+  }, [clicks, unit, mapStyle, isMapLoaded, renderTrigger, onRulerResult, onPolygonResult, timeOfDay, showSolar, showWind, windData]);
 
   // Explicit Auto-Transport (Zoom to Site)
   useEffect(() => {

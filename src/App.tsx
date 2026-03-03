@@ -32,6 +32,12 @@ function App() {
   const [historyVersion, setHistoryVersion] = useState(0); // Used to trigger SidePanel refresh
   const [zoomTrigger, setZoomTrigger] = useState(0); // Signal map to fly to site
 
+  // Environmental Analysis States
+  const [timeOfDay, setTimeOfDay] = useState<number>(12); // Noon
+  const [showSolar, setShowSolar] = useState<boolean>(false);
+  const [showWind, setShowWind] = useState<boolean>(false);
+  const [windData, setWindData] = useState<{ dominantDirection: number; speed: number } | null>(null);
+
   // Load plan from URL if Search String is present
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -208,8 +214,33 @@ function App() {
     setClicks([]);
     setMode('none');
     setPlanName('Unnamed Plan');
+    setWindData(null);
     window.history.pushState({}, '', window.location.pathname);
   }, []);
+
+  useEffect(() => {
+    if (polygonResult && polygonResult.vertices.length > 0) {
+      const lng = polygonResult.vertices[0][0];
+      const lat = polygonResult.vertices[0][1];
+
+      const fetchEnvironmentalData = async () => {
+        try {
+          const res = await fetch(`https://power.larc.nasa.gov/api/temporal/climatology/point?parameters=WD50M,WS50M&community=RE&longitude=${lng}&latitude=${lat}&format=JSON`);
+          if (!res.ok) throw new Error('Network response was not ok');
+          const data = await res.json();
+          const annWindDir = data.properties.parameter.WD50M.ANN;
+          const annWindSpeed = data.properties.parameter.WS50M.ANN;
+          setWindData({ dominantDirection: annWindDir, speed: annWindSpeed });
+        } catch (error) {
+          console.error("Failed to fetch NASA POWER data", error);
+        }
+      };
+
+      fetchEnvironmentalData();
+    } else {
+      setWindData(null);
+    }
+  }, [polygonResult]);
 
   return (
     <div className="app-container">
@@ -237,6 +268,10 @@ function App() {
         clicks={clicks}
         setClicks={setClicks}
         zoomTrigger={zoomTrigger}
+        timeOfDay={timeOfDay}
+        showSolar={showSolar}
+        showWind={showWind}
+        windData={windData}
       />
 
       <SidePanel
@@ -249,6 +284,13 @@ function App() {
         onLoadHistory={loadFromHistory}
         planName={planName}
         historyVersion={historyVersion}
+        timeOfDay={timeOfDay}
+        setTimeOfDay={setTimeOfDay}
+        showSolar={showSolar}
+        setShowSolar={setShowSolar}
+        showWind={showWind}
+        setShowWind={setShowWind}
+        windData={windData}
       />
     </div>
   );

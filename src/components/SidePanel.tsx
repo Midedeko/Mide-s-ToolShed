@@ -10,13 +10,21 @@ interface ResultProps {
     onLoadHistory: (plan: any) => void;
     planName: string;
     historyVersion: number;
+    timeOfDay: number;
+    setTimeOfDay: (time: number) => void;
+    showSolar: boolean;
+    setShowSolar: (show: boolean) => void;
+    showWind: boolean;
+    setShowWind: (show: boolean) => void;
+    windData: { dominantDirection: number; speed: number } | null;
 }
 
 const SidePanel: React.FC<ResultProps> = ({
     mode, rulerResult, polygonResult, unit,
-    isVisible, onToggleVisible, onLoadHistory, planName, historyVersion
+    isVisible, onToggleVisible, onLoadHistory, planName, historyVersion,
+    timeOfDay, setTimeOfDay, showSolar, setShowSolar, showWind, setShowWind, windData
 }) => {
-    const [activeTab, setActiveTab] = useState<'details' | 'history'>('details');
+    const [activeTab, setActiveTab] = useState<'details' | 'history' | 'analysis'>('details');
     const [savedPlans, setSavedPlans] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -63,6 +71,20 @@ const SidePanel: React.FC<ResultProps> = ({
         );
     };
 
+    const getCardinalDirection = (angle: number) => {
+        const directions = ['North', 'North-East', 'East', 'South-East', 'South', 'South-West', 'West', 'North-West'];
+        const index = Math.round(((angle %= 360) < 0 ? angle + 360 : angle) / 45) % 8;
+        return directions[index];
+    };
+
+    const formatTime = (decimalHours: number) => {
+        const Math_floor = Math.floor(decimalHours);
+        const mins = Math.round((decimalHours - Math_floor) * 60);
+        const ampm = Math_floor >= 12 ? 'PM' : 'AM';
+        const hours12 = Math_floor % 12 || 12;
+        return `${hours12}:${mins.toString().padStart(2, '0')} ${ampm}`;
+    };
+
     return (
         <>
             <button className={`panel-toggle ${!isVisible ? 'collapsed' : ''}`} onClick={onToggleVisible}>
@@ -82,6 +104,12 @@ const SidePanel: React.FC<ResultProps> = ({
                         onClick={() => setActiveTab('history')}
                     >
                         Saved Plans
+                    </button>
+                    <button
+                        className={activeTab === 'analysis' ? 'active' : ''}
+                        onClick={() => setActiveTab('analysis')}
+                    >
+                        Analysis
                     </button>
                 </div>
 
@@ -129,27 +157,84 @@ const SidePanel: React.FC<ResultProps> = ({
                             </p>
                         )}
                     </div>
+                ) : activeTab === 'analysis' ? (
+                    <div className="tab-content">
+                        <h3>Site Analysis</h3>
+                        <p className="hint" style={{ marginTop: 0, textAlign: 'left' }}>Toggle and configure environmental overlays.</p>
+
+                        <div className="result-section" style={{ marginTop: '24px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                <h4>Solar Path</h4>
+                                <label className="switch">
+                                    <input type="checkbox" checked={showSolar} onChange={(e) => setShowSolar(e.target.checked)} />
+                                    <span className="slider round"></span>
+                                </label>
+                            </div>
+
+                            {showSolar && (
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                        <span>Time of Day</span>
+                                        <strong>{formatTime(timeOfDay)}</strong>
+                                    </div>
+                                    <input
+                                        type="range"
+                                        min="0" max="23.9" step="0.1"
+                                        value={timeOfDay}
+                                        onChange={(e) => setTimeOfDay(parseFloat(e.target.value))}
+                                        style={{ width: '100%', accentColor: '#eab308' }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="result-section" style={{ marginTop: '32px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                                <h4>NASA Wind Rose</h4>
+                                <label className="switch">
+                                    <input type="checkbox" checked={showWind} onChange={(e) => setShowWind(e.target.checked)} />
+                                    <span className="slider round"></span>
+                                </label>
+                            </div>
+
+                            {showWind && windData && (
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px' }}>
+                                    <p style={{ fontSize: '1rem', margin: '0 0 12px 0' }}>
+                                        Dominant: <strong>{getCardinalDirection(windData.dominantDirection)}</strong> ({windData.dominantDirection}°)
+                                    </p>
+                                    <div style={{ padding: '12px', background: 'rgba(56, 189, 248, 0.1)', borderLeft: '4px solid #38bdf8', borderRadius: '4px', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                        <strong>Bio-Climatic Tip:</strong> Primary cooling breeze from the {getCardinalDirection(windData.dominantDirection)}. Suggest permeable facade on the {getCardinalDirection(windData.dominantDirection)} elevation to maximize cross-ventilation.
+                                    </div>
+                                </div>
+                            )}
+
+                            {showWind && !windData && polygonResult && (
+                                <p className="hint">Fetching NASA POWER climate data...</p>
+                            )}
+                            {showWind && !polygonResult && (
+                                <p className="hint">Draw a site boundary to fetch local wind data.</p>
+                            )}
+                        </div>
+                    </div>
                 ) : (
                     <div className="tab-content">
-                        <h3>Saved Layouts</h3>
+                        <h3>Saved Plans</h3>
                         {isLoading ? (
-                            <p className="hint">Loading plans...</p>
-                        ) : (
-                            <div className="plans-list">
-                                {savedPlans.length === 0 ? (
-                                    <p className="hint">No saved plans yet.</p>
-                                ) : (
-                                    savedPlans.map(plan => (
-                                        <div key={plan.id} className="plan-item" onClick={() => onLoadHistory(plan)}>
-                                            <div className="plan-info">
-                                                <strong>{plan.name || 'Unnamed Plan'}</strong>
-                                                <span>{new Date(plan.created_at).toLocaleDateString()}</span>
-                                            </div>
-                                            <button className="load-btn">Load</button>
+                            <p className="hint">Loading history...</p>
+                        ) : savedPlans.length > 0 ? (
+                            <div className="history-list">
+                                {savedPlans.map(plan => (
+                                    <div key={plan.id} className="history-item">
+                                        <div className="history-info">
+                                            <strong>{plan.name}</strong>
+                                            <span>{new Date(plan.created_at).toLocaleDateString()}</span>
                                         </div>
-                                    ))
-                                )}
+                                        <button onClick={() => onLoadHistory(plan)}>Load</button>
+                                    </div>
+                                ))}
                             </div>
+                        ) : (
+                            <p className="hint">No saved plans found in your browser history.</p>
                         )}
                     </div>
                 )}
