@@ -1,0 +1,336 @@
+.app-container {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+  overflow: hidden;
+  background-color: #020617;
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+}
+
+.toolbar {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  gap: 12px;
+  padding: 8px 16px;
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 100px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 90vw;
+  width: auto;
+  white-space: nowrap;
+}
+
+.geocoder-dock {
+  width: 260px;
+}
+
+.geocoder-dock .mapboxgl-ctrl-geocoder {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+}
+
+.geocoder-dock .mapboxgl-ctrl-geocoder--input {
+  height: 36px !important;
+  padding: 6px 10px 6px 36px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-radius: 50px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  border-radius: 50px;
+}
+
+.toolbar button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.toolbar button.active {
+  background: #0ea5e9;
+}
+
+.side-panel {
+  position: absolute;
+  right: -400px;
+  top: 20px;
+  bottom: 20px;
+  width: 320px;
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 10;
+  padding: 24px;
+  transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+  border-radius: 24px 0 0 24px;
+  color: #f1f5f9;
+  overflow-y: auto;
+}
+
+.side-panel.visible {
+  right: 0;
+}
+
+.side-panel h3 {
+  margin-top: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-bottom: 24px;
+}
+
+.result-section h4 {
+  margin: 0 0 12px 0;
+  font-size: 1.1rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.result-section p {
+  font-size: 1.25rem;
+  margin: 8px 0;
+}
+
+.result-section strong {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.point-list {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.point-list div {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 12px;
+  border-radius: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85rem;
+}
+
+.point-list button {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+.point-list button:hover {
+  background: #38bdf8;
+  color: white;
+}
+
+/* Geocoder Customization */
+.mapboxgl-ctrl-geocoder {
+  background: rgba(15, 23, 42, 0.8) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+  width: 320px !important;
+  max-width: 320px !important;
+}
+
+.mapboxgl-ctrl-geocoder--input {
+  color: #f1f5f9 !important;
+  padding: 12px 12px 12px 40px !important;
+}
+
+.mapboxgl-ctrl-geocoder--icon-search {
+  fill: #38bdf8 !important;
+  left: 12px !important;
+}
+
+.mapboxgl-ctrl-geocoder--icon-close {
+  fill: #94a3b8 !important;
+}
+
+.mapboxgl-ctrl-geocoder .suggestions {
+  background: #1e293b !important;
+  border-radius: 0 0 12px 12px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-top: none !important;
+}
+
+.mapboxgl-ctrl-geocoder .suggestions>li>a {
+  color: #cbd5e1 !important;
+}
+
+.mapboxgl-ctrl-geocoder .suggestions>.active>a,
+.mapboxgl-ctrl-geocoder .suggestions>li>a:hover {
+  background: #334155 !important;
+  color: #38bdf8 !important;
+}
+
+/* Measuring Mode Cursor */
+.map-container.measuring {
+  cursor: crosshair !important;
+}
+
+.map-container.measuring .mapboxgl-canvas-container {
+  cursor: crosshair !important;
+}
+
+/* Peg Markers */
+.peg-marker {
+  width: 24px;
+  height: 24px;
+  background: #38bdf8;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: bold;
+  font-size: 12px;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  cursor: grab;
+}
+
+.peg-marker:active {
+  cursor: grabbing;
+}
+
+/* Unit Selector */
+.unit-selector {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.unit-selector select {
+  background: transparent;
+  color: #38bdf8;
+  border: none;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  padding: 4px;
+}
+
+.primary-result {
+  font-size: 1.75rem !important;
+  color: #38bdf8 !important;
+  font-weight: 700 !important;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.hint {
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  margin-top: 40px;
+  line-height: 1.6;
+}
+
+/* Panel Toggle */
+.panel-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 101;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(30, 41, 59, 0.8);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(8px);
+}
+
+.panel-toggle:hover {
+  background: #38bdf8;
+  border-color: #38bdf8;
+}
+
+/* Context Menu */
+.context-menu {
+  position: absolute;
+  z-index: 1000;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 200px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  color: white;
+}
+
+.menu-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.menu-item input[type="color"] {
+  width: 50px;
+  height: 24px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.menu-item input[type="range"] {
+  width: 80px;
+}
+
+.context-menu button {
+  width: 100%;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.context-menu button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+}
