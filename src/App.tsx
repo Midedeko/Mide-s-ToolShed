@@ -55,7 +55,17 @@ function App() {
   };
 
   const applyPlanData = (data: any) => {
-    if (data.clicks) setClicks(data.clicks);
+    if (data.clicks) {
+      // Normalize legacy object format {lng, lat} to array format [lng, lat]
+      const normalizedClicks = data.clicks.map((item: any) => {
+        if (Array.isArray(item)) return item;
+        if (item && typeof item.lng === 'number' && typeof item.lat === 'number') {
+          return [item.lng, item.lat];
+        }
+        return item;
+      });
+      setClicks(normalizedClicks);
+    }
     if (data.unit) setUnit(data.unit);
     if (data.mapStyle) setMapStyle(data.mapStyle);
     if (data.siteStyle) setSiteStyle(data.siteStyle);
@@ -70,10 +80,20 @@ function App() {
 
     let finalName = planName;
     if (planName === 'Unnamed Plan') {
-      const namePrompt = window.prompt("Give this layout a name before sharing:");
-      if (!namePrompt) return;
-      finalName = namePrompt;
-      setPlanName(namePrompt);
+      let namePrompt = null;
+      try {
+        namePrompt = window.prompt("Give this layout a name before sharing:");
+      } catch (e) {
+        console.warn("Prompt blocked");
+      }
+
+      if (!namePrompt) {
+        // Fallback if prompt is blocked or user cancelled without typing
+        finalName = `Site Plan ${new Date().toLocaleDateString()}`;
+      } else {
+        finalName = namePrompt;
+      }
+      setPlanName(finalName);
     }
 
     const planData = {
