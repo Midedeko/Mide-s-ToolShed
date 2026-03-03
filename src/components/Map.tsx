@@ -318,7 +318,7 @@ const Map: React.FC<MapProps> = ({
 
     measurementSource.setData({ type: 'FeatureCollection', features });
     areaSource.setData({ type: 'FeatureCollection', features: areaFeatures });
-  }, [clicks, unit, mapStyle, onRulerResult, onPolygonResult]);
+  }, [clicks, unit, mapStyle, isMapLoaded, onRulerResult, onPolygonResult]);
 
   // Explicit Auto-Transport (Zoom to Site)
   useEffect(() => {
