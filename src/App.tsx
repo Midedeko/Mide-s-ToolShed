@@ -40,6 +40,7 @@ function App() {
     if (encodedData) {
       loadFromEncodedString(encodedData);
       setZoomTrigger(v => v + 1);
+      setIsPanelVisible(true);
     }
   }, []);
 
@@ -133,19 +134,37 @@ function App() {
 
   const handleExport = () => {
     if (clicks.length === 0) return;
+
+    let finalName = planName;
+    if (planName === 'Unnamed Plan') {
+      let namePrompt = null;
+      try {
+        namePrompt = window.prompt("Give this layout a name before exporting:");
+      } catch (e) {
+        console.warn("Prompt blocked");
+      }
+
+      if (!namePrompt) {
+        finalName = `Site Plan ${new Date().toLocaleDateString()}`;
+      } else {
+        finalName = namePrompt;
+      }
+      setPlanName(finalName);
+    }
+
     const planData = {
       clicks,
       unit,
       mapStyle,
       siteStyle,
-      name: planName,
+      name: finalName,
       exported_at: new Date().toISOString()
     };
     const blob = new Blob([JSON.stringify(planData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${planName.replace(/\s+/g, '_')}_plan.json`;
+    a.download = `${finalName.replace(/\s+/g, '_')}_plan.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -157,6 +176,7 @@ function App() {
         const data = JSON.parse(e.target?.result as string);
         applyPlanData(data);
         setZoomTrigger(v => v + 1);
+        setIsPanelVisible(true);
         alert('Plan imported successfully! Transporting to site...');
       } catch (err) {
         alert('Failed to parse the plan file.');
@@ -168,6 +188,7 @@ function App() {
   const loadFromHistory = (plan: SavedPlan) => {
     applyPlanData(plan.data);
     setZoomTrigger(v => v + 1);
+    setIsPanelVisible(true);
     const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(plan.data));
     const newUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
     window.history.pushState({}, '', newUrl);
