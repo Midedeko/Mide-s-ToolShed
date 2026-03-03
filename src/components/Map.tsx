@@ -23,13 +23,14 @@ interface MapProps {
   setSiteStyle: (style: SiteStyle) => void;
   onRulerResult: (distanceMeters: number, pointA: [number, number], pointB: [number, number]) => void;
   onPolygonResult: (areaSqMeters: number, vertices: [number, number][]) => void;
+  clicks: [number, number][];
+  setClicks: React.Dispatch<React.SetStateAction<[number, number][]>>;
 }
 
-const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle, onRulerResult, onPolygonResult }) => {
+const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle, onRulerResult, onPolygonResult, clicks, setClicks }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
-  const [clicks, setClicks] = useState<[number, number][]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
 
   const formatDistance = (meters: number) => {

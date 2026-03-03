@@ -11,9 +11,12 @@ interface ToolbarProps {
     unit: Unit;
     setUnit: (unit: Unit) => void;
     onClear: () => void;
+    onSave: () => void;
+    isSaving: boolean;
+    shareLink: string | null;
 }
 
-const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMapStyle, unit, setUnit, onClear }) => {
+const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMapStyle, unit, setUnit, onClear, onSave, isSaving, shareLink }) => {
     const toggleStyle = () => {
         setMapStyle(
             mapStyle === 'mapbox://styles/mapbox/dark-v11'
@@ -59,6 +62,27 @@ const Toolbar: React.FC<ToolbarProps> = ({ currentMode, setMode, mapStyle, setMa
             <button onClick={onClear}>
                 <span className="icon">✖</span> Clear
             </button>
+
+            <div className="vertical-divider"></div>
+
+            <button
+                onClick={onSave}
+                disabled={isSaving}
+                className={isSaving ? 'loading' : ''}
+            >
+                <span className="icon">{isSaving ? '⌛' : '💾'}</span> {isSaving ? 'Saving...' : 'Save Plan'}
+            </button>
+
+            {shareLink && (
+                <div className="share-box">
+                    <button onClick={() => {
+                        navigator.clipboard.writeText(shareLink);
+                        alert('Link copied to clipboard!');
+                    }}>
+                        <span className="icon">🔗</span> Copy Share Link
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
