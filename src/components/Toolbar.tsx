@@ -11,15 +11,14 @@ interface ToolbarProps {
     unit: Unit;
     setUnit: (unit: Unit) => void;
     onClear: () => void;
-    onSave: () => void;
+    onShare: () => void;
     onExport: () => void;
     onImport: (file: File) => void;
-    shareLink: string | null;
 }
 
 const Toolbar: React.FC<ToolbarProps> = ({
     currentMode, setMode, mapStyle, setMapStyle,
-    unit, setUnit, onClear, onSave, onExport, onImport, shareLink
+    unit, setUnit, onClear, onShare, onExport, onImport
 }) => {
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -90,8 +89,8 @@ const Toolbar: React.FC<ToolbarProps> = ({
 
             <div className="vertical-divider"></div>
 
-            <button onClick={onSave} title="Save to History">
-                <span className="icon">💾</span> Save
+            <button onClick={onShare} title="Generate Share Link & Save">
+                <span className="icon">🔗</span> Share Link
             </button>
 
             <button onClick={onExport} title="Download as File">
@@ -101,17 +100,6 @@ const Toolbar: React.FC<ToolbarProps> = ({
             <button onClick={handleImportClick} title="Upload from File">
                 <span className="icon">📤</span> Import
             </button>
-
-            {shareLink && (
-                <div className="share-box">
-                    <button onClick={() => {
-                        navigator.clipboard.writeText(shareLink);
-                        alert('Link copied to clipboard!');
-                    }}>
-                        <span className="icon">🔗</span> Share Link
-                    </button>
-                </div>
-            )}
         </div>
     );
 };

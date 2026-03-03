@@ -29,8 +29,8 @@ function App() {
   const [polygonResult, setPolygonResult] = useState<{ areaSqMeters: number; vertices: [number, number][] } | null>(null);
   const [clicks, setClicks] = useState<[number, number][]>([]);
   const [planName, setPlanName] = useState<string>('Unnamed Plan');
-  const [shareLink, setShareLink] = useState<string | null>(null);
   const [historyVersion, setHistoryVersion] = useState(0); // Used to trigger SidePanel refresh
+  const [zoomTrigger, setZoomTrigger] = useState(0); // Signal map to fly to site
 
   // Load plan from URL if Search String is present
   useEffect(() => {
@@ -39,6 +39,7 @@ function App() {
 
     if (encodedData) {
       loadFromEncodedString(encodedData);
+      setZoomTrigger(v => v + 1);
     }
   }, []);
 
@@ -48,7 +49,6 @@ function App() {
       if (!decoded) return;
       const data = JSON.parse(decoded);
       applyPlanData(data);
-      setShareLink(window.location.href);
     } catch (e) {
       console.error('Failed to decode data from URL', e);
     }
@@ -62,15 +62,19 @@ function App() {
     if (data.name) setPlanName(data.name);
   };
 
-  const handleSave = () => {
+  const handleShare = () => {
     if (clicks.length === 0) {
-      alert('Please add some points to the map before saving.');
+      alert('Please add some points to the map before sharing.');
       return;
     }
 
-    const namePrompt = window.prompt("What would you like to call this site layout?", planName);
-    const finalName = namePrompt || planName;
-    if (namePrompt) setPlanName(namePrompt);
+    let finalName = planName;
+    if (planName === 'Unnamed Plan') {
+      const namePrompt = window.prompt("Give this layout a name before sharing:");
+      if (!namePrompt) return;
+      finalName = namePrompt;
+      setPlanName(namePrompt);
+    }
 
     const planData = {
       clicks,
@@ -83,10 +87,9 @@ function App() {
     // Generate Share Link (URL is self-sufficient)
     const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(planData));
     const selfSufficientUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
-    setShareLink(selfSufficientUrl);
     window.history.pushState({}, '', selfSufficientUrl);
 
-    // Save to Local Storage History
+    // Save to Local Storage History (Automatically on Share)
     try {
       const historyStr = localStorage.getItem('site_planner_history') || '[]';
       const history = JSON.parse(historyStr);
@@ -97,8 +100,12 @@ function App() {
         created_at: new Date().toISOString()
       };
       history.unshift(newPlan);
-      localStorage.setItem('site_planner_history', JSON.stringify(history.slice(0, 50))); // Keep last 50
-      setHistoryVersion(v => v + 1); // Trigger SidePanel update
+      localStorage.setItem('site_planner_history', JSON.stringify(history.slice(0, 50)));
+      setHistoryVersion(v => v + 1);
+
+      // Copy to clipboard
+      navigator.clipboard.writeText(selfSufficientUrl);
+      alert('Link generated and copied to clipboard! Plan also saved to your local history.');
     } catch (e) {
       console.error('Failed to save to local storage', e);
     }
@@ -129,7 +136,8 @@ function App() {
       try {
         const data = JSON.parse(e.target?.result as string);
         applyPlanData(data);
-        alert('Plan imported successfully!');
+        setZoomTrigger(v => v + 1);
+        alert('Plan imported successfully! Transporting to site...');
       } catch (err) {
         alert('Failed to parse the plan file.');
       }
@@ -139,11 +147,12 @@ function App() {
 
   const loadFromHistory = (plan: SavedPlan) => {
     applyPlanData(plan.data);
+    setZoomTrigger(v => v + 1);
     const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(plan.data));
     const newUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
-    setShareLink(newUrl);
     window.history.pushState({}, '', newUrl);
   };
+
   const handleRulerResult = useCallback((distanceMeters: number, pointA: [number, number], pointB: [number, number]) => {
     setRulerResult({ distanceMeters, pointA, pointB });
   }, []);
@@ -156,8 +165,8 @@ function App() {
     setRulerResult(null);
     setPolygonResult(null);
     setClicks([]);
-    setShareLink(null);
     setMode('none');
+    setPlanName('Unnamed Plan');
     window.history.pushState({}, '', window.location.pathname);
   }, []);
 
@@ -171,10 +180,9 @@ function App() {
         unit={unit}
         setUnit={setUnit}
         onClear={handleClear}
-        onSave={handleSave}
+        onShare={handleShare}
         onExport={handleExport}
         onImport={handleImport}
-        shareLink={shareLink}
       />
 
       <Map
@@ -187,6 +195,7 @@ function App() {
         onPolygonResult={handlePolygonResult}
         clicks={clicks}
         setClicks={setClicks}
+        zoomTrigger={zoomTrigger}
       />
 
       <SidePanel

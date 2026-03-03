@@ -25,9 +25,13 @@ interface MapProps {
   onPolygonResult: (areaSqMeters: number, vertices: [number, number][]) => void;
   clicks: [number, number][];
   setClicks: React.Dispatch<React.SetStateAction<[number, number][]>>;
+  zoomTrigger: number;
 }
 
-const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle, onRulerResult, onPolygonResult, clicks, setClicks }) => {
+const Map: React.FC<MapProps> = ({
+  mode, mapStyle, unit, siteStyle, setSiteStyle,
+  onRulerResult, onPolygonResult, clicks, setClicks, zoomTrigger
+}) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
@@ -309,15 +313,17 @@ const Map: React.FC<MapProps> = ({ mode, mapStyle, unit, siteStyle, setSiteStyle
 
     measurementSource.setData({ type: 'FeatureCollection', features });
     areaSource.setData({ type: 'FeatureCollection', features: areaFeatures });
-
-    // Auto-center on initial load if clicks exist
-    if (clicks.length > 0 && mapRef.current && !mapRef.current.isMoving()) {
-      const bounds = new mapboxgl.LngLatBounds();
-      clicks.forEach(c => bounds.extend(c));
-      mapRef.current.fitBounds(bounds, { padding: 50, maxZoom: 18, animate: true });
-    }
-
   }, [clicks, unit, mapStyle, onRulerResult, onPolygonResult]);
+
+  // Explicit Auto-Transport (Zoom to Site)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || clicks.length === 0 || zoomTrigger === 0) return;
+
+    const bounds = new mapboxgl.LngLatBounds();
+    clicks.forEach(c => bounds.extend(c));
+    map.fitBounds(bounds, { padding: 100, maxZoom: 18, animate: true });
+  }, [zoomTrigger]);
 
   useEffect(() => {
     const map = mapRef.current;
