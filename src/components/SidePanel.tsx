@@ -2,14 +2,17 @@ import React, { useState, useEffect } from 'react';
 
 interface ResultProps {
     mode: 'none' | 'ruler' | 'polygon';
+    clicks: [number, number][];
     rulerResult: { distanceMeters: number; pointA: [number, number]; pointB: [number, number] } | null;
     polygonResult: { areaSqMeters: number; vertices: [number, number][] } | null;
-    unit: 'mm' | 'cm' | 'inch' | 'ft';
+    unit: 'mm' | 'km' | 'ft' | 'mi';
     isVisible: boolean;
     onToggleVisible: () => void;
     onLoadHistory: (plan: any) => void;
+    onLoadFromPastedCoordinates: (text: string) => void;
     planName: string;
     historyVersion: number;
+    showAnalysisTooltip: boolean;
     timeOfDay: number;
     setTimeOfDay: (time: number) => void;
     showSolar: boolean;
@@ -20,13 +23,15 @@ interface ResultProps {
 }
 
 const SidePanel: React.FC<ResultProps> = ({
-    mode, rulerResult, polygonResult, unit,
-    isVisible, onToggleVisible, onLoadHistory, planName, historyVersion,
+    mode, clicks, rulerResult, polygonResult, unit,
+    isVisible, onToggleVisible, onLoadHistory, onLoadFromPastedCoordinates, planName, historyVersion,
+    showAnalysisTooltip,
     timeOfDay, setTimeOfDay, showSolar, setShowSolar, showWind, setShowWind, windData
 }) => {
     const [activeTab, setActiveTab] = useState<'details' | 'history' | 'analysis'>('details');
     const [savedPlans, setSavedPlans] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [pastedCoords, setPastedCoords] = useState('');
 
     useEffect(() => {
         fetchLocalHistory();
@@ -49,12 +54,35 @@ const SidePanel: React.FC<ResultProps> = ({
         alert('Coordinates copied to clipboard!');
     };
 
+    const pegCoordinatesText = clicks.length > 0
+        ? clicks.map((c, i) => `Peg ${i + 1}: ${c[1].toFixed(6)}, ${c[0].toFixed(6)}`).join('\n')
+        : '';
+
+    const handleCopyPegs = () => {
+        if (pegCoordinatesText) copyToClipboard(pegCoordinatesText);
+    };
+
+    const handleLoadPegs = () => {
+        onLoadFromPastedCoordinates(pastedCoords);
+        setPastedCoords('');
+    };
+
+    const pegInputRef = React.useRef<HTMLInputElement>(null);
+    const hasPegDataFromTool = clicks.length > 0;
+    const hasPastedOrTypedCoords = pastedCoords.trim() !== '';
+    const pegActionLabel = hasPastedOrTypedCoords ? 'Load Pegs' : hasPegDataFromTool ? 'Copy Pegs' : 'Add Pegs';
+    const handlePegAction = () => {
+        if (hasPastedOrTypedCoords) handleLoadPegs();
+        else if (hasPegDataFromTool) handleCopyPegs();
+        else pegInputRef.current?.focus();
+    };
+
     const convertDist = (meters: number) => {
         switch (unit) {
             case 'mm': return `${(meters * 1000).toLocaleString()} mm`;
-            case 'cm': return `${(meters * 100).toLocaleString()} cm`;
-            case 'inch': return `${(meters * 39.3701).toLocaleString()} in`;
+            case 'km': return `${(meters / 1000).toLocaleString()} km`;
             case 'ft': return `${(meters * 3.28084).toLocaleString()} ft`;
+            case 'mi': return `${(meters * 0.000621371).toLocaleString()} mi`;
             default: return `${meters.toFixed(2)} m`;
         }
     };
@@ -105,33 +133,40 @@ const SidePanel: React.FC<ResultProps> = ({
         <>
             <button className={`panel-toggle ${!isVisible ? 'collapsed' : ''}`} onClick={onToggleVisible} title={isVisible ? "Hide Panel" : "Show Panel"}>
                 {isVisible ? <EyeIcon /> : <EyeOffIcon />}
+                {showAnalysisTooltip && !isVisible && (
+                    <div className="analysis-tooltip">
+                        VIEW ANALYSIS
+                    </div>
+                )}
             </button>
 
             <div className={`side-panel ${isVisible ? 'visible' : ''}`}>
-                <div className="panel-tabs">
+                {/* Row 1: 3 tabs */}
+                <div className="panel-tabs panel-row-1">
                     <button
                         className={activeTab === 'details' ? 'active' : ''}
                         onClick={() => setActiveTab('details')}
                     >
-                        Details
+                        DETAILS
                     </button>
                     <button
                         className={activeTab === 'history' ? 'active' : ''}
                         onClick={() => setActiveTab('history')}
                     >
-                        Saved Plans
+                        SAVES
                     </button>
                     <button
                         className={activeTab === 'analysis' ? 'active' : ''}
                         onClick={() => setActiveTab('analysis')}
                     >
-                        Analysis
+                        ANALYSIS
                     </button>
                 </div>
 
+                {/* Row 2: details content */}
                 {activeTab === 'details' ? (
-                    <div className="tab-content">
-                        <h3>{planName || 'Current Plan'}</h3>
+                    <div className="tab-content panel-row-2">
+                        <h3>{((rulerResult != null) || (polygonResult != null) || clicks.length > 0) ? (planName || 'Current Plan') : 'Mark out a section for details'}</h3>
 
                         {rulerResult && (
                             <div className="result-section">
@@ -169,12 +204,12 @@ const SidePanel: React.FC<ResultProps> = ({
                             <p className="hint">
                                 {mode === 'ruler'
                                     ? 'Click two points to measure distance.'
-                                    : 'Click 4 points to set out the site boundary. Drag pegs to adjust. Right-click pegs to delete.'}
+                                    : 'Click on the map to place boundary pegs. Drag pegs to adjust. Right-click pegs to delete.'}
                             </p>
                         )}
                     </div>
                 ) : activeTab === 'analysis' ? (
-                    <div className="tab-content">
+                    <div className="tab-content panel-row-2">
                         <h3>Site Analysis</h3>
                         <p className="hint" style={{ marginTop: 0, textAlign: 'left' }}>Toggle and configure environmental overlays.</p>
 
@@ -188,7 +223,7 @@ const SidePanel: React.FC<ResultProps> = ({
                             </div>
 
                             {showSolar && (
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '0' }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                                         <span>Time of Day</span>
                                         <strong>{formatTime(timeOfDay)}</strong>
@@ -214,11 +249,11 @@ const SidePanel: React.FC<ResultProps> = ({
                             </div>
 
                             {showWind && windData && (
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '0' }}>
                                     <p style={{ fontSize: '1rem', margin: '0 0 12px 0' }}>
                                         Dominant: <strong>{getCardinalDirection(windData.dominantDirection)}</strong> ({windData.dominantDirection}°)
                                     </p>
-                                    <div style={{ padding: '12px', background: 'rgba(56, 189, 248, 0.1)', borderLeft: '4px solid #38bdf8', borderRadius: '4px', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                                    <div style={{ padding: '12px', background: 'rgba(56, 189, 248, 0.1)', borderLeft: '4px solid #38bdf8', borderRadius: '0', fontSize: '0.9rem', lineHeight: 1.5 }}>
                                         <strong>Bio-Climatic Tip:</strong> Primary cooling breeze from the {getCardinalDirection(windData.dominantDirection)}. Suggest permeable facade on the {getCardinalDirection(windData.dominantDirection)} elevation to maximize cross-ventilation.
                                     </div>
                                 </div>
@@ -233,7 +268,7 @@ const SidePanel: React.FC<ResultProps> = ({
                         </div>
                     </div>
                 ) : (
-                    <div className="tab-content">
+                    <div className="tab-content panel-row-2">
                         <h3>Saved Plans</h3>
                         {isLoading ? (
                             <p className="hint">Loading history...</p>
@@ -254,6 +289,25 @@ const SidePanel: React.FC<ResultProps> = ({
                         )}
                     </div>
                 )}
+
+                {/* Row 3: single-line peg input + context-aware button (Copy Pegs | Add Pegs | Load Pegs) */}
+                <div className="panel-row-3 panel-row-peg-input">
+                    <input
+                        ref={pegInputRef}
+                        type="text"
+                        className="peg-single-line-input"
+                        value={pastedCoords}
+                        onChange={(e) => setPastedCoords(e.target.value)}
+                        placeholder="Paste or type coordinates (lat,lng or lat lng)"
+                    />
+                    <button
+                        type="button"
+                        className="peg-action-btn"
+                        onClick={handlePegAction}
+                    >
+                        {pegActionLabel}
+                    </button>
+                </div>
             </div>
         </>
     );

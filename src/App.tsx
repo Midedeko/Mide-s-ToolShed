@@ -4,6 +4,10 @@ import './App.css';
 import Map from './components/Map.tsx';
 import Toolbar from './components/Toolbar.tsx';
 import SidePanel from './components/SidePanel.tsx';
+import LoadingScreen from './components/LoadingScreen.tsx';
+import LandingPage from './components/LandingPage.tsx';
+import ToolshedLogo from './assets/icons/Mides Toolshed Logo.svg?react';
+import { Agentation } from 'agentation';
 
 type Mode = 'none' | 'ruler' | 'polygon';
 
@@ -15,13 +19,14 @@ interface SavedPlan {
 }
 
 function App() {
+  const [view, setView] = useState<'loading' | 'landing' | 'planner'>('loading');
   const [mode, setMode] = useState<Mode>('none');
-  const [mapStyle, setMapStyle] = useState<string>('mapbox://styles/mapbox/dark-v11');
-  const [unit, setUnit] = useState<'mm' | 'cm' | 'inch' | 'ft'>('ft');
-  const [isPanelVisible, setIsPanelVisible] = useState(true);
+  const [mapStyle, setMapStyle] = useState<string>('mapbox://styles/mapbox/satellite-v9');
+  const [unit, setUnit] = useState<'mm' | 'km' | 'ft' | 'mi'>('ft');
+  const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [siteStyle, setSiteStyle] = useState({
-    strokeColor: '#38bdf8',
-    fillColor: '#0ea5e9',
+    strokeColor: '#ffffff',
+    fillColor: '#ffffff',
     strokeOpacity: 1,
     fillOpacity: 0.2
   });
@@ -37,6 +42,8 @@ function App() {
   const [showSolar, setShowSolar] = useState<boolean>(false);
   const [showWind, setShowWind] = useState<boolean>(false);
   const [windData, setWindData] = useState<{ dominantDirection: number; speed: number } | null>(null);
+  const [showAnalysisTooltip, setShowAnalysisTooltip] = useState(false);
+  const [hasClickedAnalysis, setHasClickedAnalysis] = useState(false);
 
   // Load plan from URL if Search String is present
   useEffect(() => {
@@ -200,13 +207,35 @@ function App() {
     window.history.pushState({}, '', newUrl);
   };
 
+  const loadFromPastedCoordinates = (text: string) => {
+    const lines = text.trim().split(/\r?\n/).filter(Boolean);
+    const coords: [number, number][] = [];
+    for (const line of lines) {
+      const match = line.match(/(-?\d+\.?\d*)\s*[, \t]\s*(-?\d+\.?\d*)/);
+      if (match) {
+        const lat = parseFloat(match[1]);
+        const lng = parseFloat(match[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          coords.push([lng, lat]);
+        }
+      }
+    }
+    if (coords.length > 0) {
+      setClicks(coords);
+      setZoomTrigger(v => v + 1);
+      setIsPanelVisible(true);
+    }
+  };
+
   const handleRulerResult = useCallback((distanceMeters: number, pointA: [number, number], pointB: [number, number]) => {
     setRulerResult({ distanceMeters, pointA, pointB });
-  }, []);
+    if (!isPanelVisible && !hasClickedAnalysis) setShowAnalysisTooltip(true);
+  }, [isPanelVisible, hasClickedAnalysis]);
 
   const handlePolygonResult = useCallback((areaSqMeters: number, vertices: [number, number][]) => {
     setPolygonResult({ areaSqMeters: areaSqMeters || 0, vertices: vertices || [] });
-  }, []);
+    if (!isPanelVisible && !hasClickedAnalysis) setShowAnalysisTooltip(true);
+  }, [isPanelVisible, hasClickedAnalysis]);
 
   const handleClear = useCallback(() => {
     setRulerResult(null);
@@ -215,8 +244,15 @@ function App() {
     setMode('none');
     setPlanName('Unnamed Plan');
     setWindData(null);
+    // Remove search markers and other map overlays
+    setShowAnalysisTooltip(false);
+    window.dispatchEvent(new Event('clear-map-extras'));
     window.history.pushState({}, '', window.location.pathname);
   }, []);
+
+  useEffect(() => {
+    if (mode !== 'none') setShowAnalysisTooltip(false);
+  }, [mode]);
 
   useEffect(() => {
     if (polygonResult && polygonResult.vertices.length > 0) {
@@ -242,8 +278,30 @@ function App() {
     }
   }, [polygonResult]);
 
+  if (view === 'loading') {
+    return <LoadingScreen onFadeComplete={() => setView('landing')} />;
+  }
+
+  if (view === 'landing') {
+    return <LandingPage onSelectTool={(id) => id === 'geo-planner' && setView('planner')} />;
+  }
+
   return (
-    <div className="app-container">
+    <div className="app-container planner-view">
+      <header className="landing-header tool-header-unified white-branding">
+        <div className="brand-text-left">
+          <span className="brand-line1">GEO / SITE</span>
+          <span className="brand-line2">PLANNER</span>
+        </div>
+        <div
+          className="mides-toolshed-logo-center clickable"
+          onClick={() => setView('landing')}
+          style={{ cursor: 'pointer' }}
+        >
+          <ToolshedLogo className="logo-svg" style={{ width: '48px', height: '48px' }} />
+        </div>
+      </header>
+
       <Toolbar
         currentMode={mode}
         setMode={setMode}
@@ -255,6 +313,7 @@ function App() {
         onShare={handleShare}
         onExport={handleExport}
         onImport={handleImport}
+        onHidePanel={() => setIsPanelVisible(false)}
       />
 
       <Map
@@ -276,12 +335,19 @@ function App() {
 
       <SidePanel
         mode={mode}
+        clicks={clicks}
         rulerResult={rulerResult}
         polygonResult={polygonResult}
         unit={unit}
         isVisible={isPanelVisible}
-        onToggleVisible={() => setIsPanelVisible(!isPanelVisible)}
+        onToggleVisible={() => {
+          setIsPanelVisible(!isPanelVisible);
+          setShowAnalysisTooltip(false);
+          setHasClickedAnalysis(true);
+        }}
+        showAnalysisTooltip={showAnalysisTooltip}
         onLoadHistory={loadFromHistory}
+        onLoadFromPastedCoordinates={loadFromPastedCoordinates}
         planName={planName}
         historyVersion={historyVersion}
         timeOfDay={timeOfDay}
@@ -292,6 +358,7 @@ function App() {
         setShowWind={setShowWind}
         windData={windData}
       />
+      {import.meta.env.DEV && <Agentation />}
     </div>
   );
 }
