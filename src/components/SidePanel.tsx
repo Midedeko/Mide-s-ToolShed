@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 interface ResultProps {
     mode: 'none' | 'ruler' | 'polygon';
@@ -8,10 +8,8 @@ interface ResultProps {
     unit: 'mm' | 'km' | 'ft' | 'mi';
     isVisible: boolean;
     onToggleVisible: () => void;
-    onLoadHistory: (plan: any) => void;
     onLoadFromPastedCoordinates: (text: string) => void;
     planName: string;
-    historyVersion: number;
     showAnalysisTooltip: boolean;
     timeOfDay: number;
     setTimeOfDay: (time: number) => void;
@@ -23,31 +21,12 @@ interface ResultProps {
 }
 
 const SidePanel: React.FC<ResultProps> = ({
-    mode, clicks, rulerResult, polygonResult, unit,
-    isVisible, onToggleVisible, onLoadHistory, onLoadFromPastedCoordinates, planName, historyVersion,
+    isVisible, onToggleVisible, onLoadFromPastedCoordinates, planName,
     showAnalysisTooltip,
-    timeOfDay, setTimeOfDay, showSolar, setShowSolar, showWind, setShowWind, windData
+    timeOfDay, setTimeOfDay, showSolar, setShowSolar, showWind, setShowWind, windData, clicks, mode, rulerResult, polygonResult, unit
 }) => {
-    const [activeTab, setActiveTab] = useState<'details' | 'history' | 'analysis'>('details');
-    const [savedPlans, setSavedPlans] = useState<any[]>([]);
-    const [isLoading, setIsLoading] = useState(false);
+    const [activeTab, setActiveTab] = useState<'details' | 'hints' | 'analysis'>('details');
     const [pastedCoords, setPastedCoords] = useState('');
-
-    useEffect(() => {
-        fetchLocalHistory();
-    }, [activeTab, historyVersion]);
-
-    const fetchLocalHistory = () => {
-        setIsLoading(true);
-        try {
-            const historyStr = localStorage.getItem('site_planner_history') || '[]';
-            const history = JSON.parse(historyStr);
-            setSavedPlans(history);
-        } catch (e) {
-            console.error('Failed to parse local history', e);
-        }
-        setIsLoading(false);
-    };
 
     const copyToClipboard = (text: string) => {
         navigator.clipboard.writeText(text);
@@ -150,10 +129,10 @@ const SidePanel: React.FC<ResultProps> = ({
                         DETAILS
                     </button>
                     <button
-                        className={activeTab === 'history' ? 'active' : ''}
-                        onClick={() => setActiveTab('history')}
+                        className={activeTab === 'hints' ? 'active' : ''}
+                        onClick={() => setActiveTab('hints')}
                     >
-                        SAVES
+                        HINTS
                     </button>
                     <button
                         className={activeTab === 'analysis' ? 'active' : ''}
@@ -269,24 +248,24 @@ const SidePanel: React.FC<ResultProps> = ({
                     </div>
                 ) : (
                     <div className="tab-content panel-row-2">
-                        <h3>Saved Plans</h3>
-                        {isLoading ? (
-                            <p className="hint">Loading history...</p>
-                        ) : savedPlans.length > 0 ? (
-                            <div className="history-list">
-                                {savedPlans.map(plan => (
-                                    <div key={plan.id} className="history-item">
-                                        <div className="history-info">
-                                            <strong>{plan.name}</strong>
-                                            <span>{new Date(plan.created_at).toLocaleDateString()}</span>
-                                        </div>
-                                        <button onClick={() => onLoadHistory(plan)}>Load</button>
-                                    </div>
-                                ))}
+                        <h3>How to Use</h3>
+                        <div className="hints-tab">
+                            <div className="hint-item">
+                                <strong>1. MEASURE:</strong> Click two points on the map to calculate straight-line distance.
                             </div>
-                        ) : (
-                            <p className="hint">No saved plans found in your browser history.</p>
-                        )}
+                            <div className="hint-item">
+                                <strong>2. SET OUT:</strong> Tap 3+ points to create a region. Once finished, we’ll calculate area and solar exposure.
+                            </div>
+                            <div className="hint-item">
+                                <strong>3. PEGS:</strong> Drop precise markers by typing or pasting "Lat, Lng" in the bottom input field.
+                            </div>
+                            <div className="hint-item">
+                                <strong>4. SETTINGS:</strong> Switch between 2D/3D views, toggle map styles, or change units (MM, KM, FT, MI).
+                            </div>
+                            <div className="hint-item">
+                                <strong>5. FILES:</strong> Export your layout as a file or generate a shareable URL to send to your team.
+                            </div>
+                        </div>
                     </div>
                 )}
 

@@ -20,6 +20,7 @@ interface MapProps {
   mode: Mode;
   mapStyle: string;
   unit: Unit;
+  is3D: boolean;
   siteStyle: SiteStyle;
   setSiteStyle: (style: SiteStyle) => void;
   onRulerResult: (distanceMeters: number, pointA: [number, number], pointB: [number, number]) => void;
@@ -34,7 +35,7 @@ interface MapProps {
 }
 
 const Map: React.FC<MapProps> = ({
-  mode, mapStyle, unit, siteStyle, setSiteStyle,
+  mode, mapStyle, unit, is3D, siteStyle, setSiteStyle,
   onRulerResult, onPolygonResult, clicks, setClicks, zoomTrigger,
   timeOfDay, showSolar, showWind, windData
 }) => {
@@ -218,6 +219,12 @@ const Map: React.FC<MapProps> = ({
     hudLabelsRef.current.forEach(m => m.remove());
     hudLabelsRef.current = [];
   };
+
+  useEffect(() => {
+    if (mapRef.current) {
+      mapRef.current.setPitch(is3D ? 60 : 0);
+    }
+  }, [is3D]);
 
   useEffect(() => {
     if (!mapContainer.current) return;

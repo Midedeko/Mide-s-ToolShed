@@ -18,6 +18,8 @@ interface ToolbarProps {
     setMapStyle: (style: string) => void;
     unit: Unit;
     setUnit: (unit: Unit) => void;
+    is3D: boolean;
+    setIs3D: (is3D: boolean) => void;
     onClear: () => void;
     onShare: () => void;
     onExport: () => void;
@@ -39,8 +41,8 @@ const CloseIcon = ({ color = "currentColor", size = 20 }) => (
 );
 
 const Toolbar: React.FC<ToolbarProps> = ({
-    currentMode, setMode, mapStyle, setMapStyle,
-    unit, setUnit, onClear, onShare, onExport, onImport, onHidePanel
+    currentMode, setMode, mapStyle, setMapStyle, unit, setUnit, is3D, setIs3D,
+    onClear, onShare, onExport, onImport, onHidePanel
 }) => {
     const fileInputRef = React.useRef<HTMLInputElement>(null);
     const [isSearching, setIsSearching] = React.useState(false);
@@ -161,6 +163,9 @@ const Toolbar: React.FC<ToolbarProps> = ({
                                     <button onClick={toggleStyle}>
                                         {mapStyle.includes('satellite') ? <DarkmodeIcon width="16" height="16" /> : <SateliteIcon width="16" height="16" />}
                                         {mapStyle.includes('satellite') ? 'DARK MODE' : 'SATELLITE'}
+                                    </button>
+                                    <button onClick={() => setIs3D(!is3D)}>
+                                        {is3D ? '2D' : '3D'}
                                     </button>
                                     <button onClick={(e) => { e.stopPropagation(); setShowUnitsMenu(true); }} style={{ justifyContent: 'center' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>

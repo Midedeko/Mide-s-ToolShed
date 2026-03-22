@@ -11,18 +11,12 @@ import { Agentation } from 'agentation';
 
 type Mode = 'none' | 'ruler' | 'polygon';
 
-interface SavedPlan {
-  id: string;
-  name: string;
-  data: any;
-  created_at: string;
-}
-
 function App() {
   const [view, setView] = useState<'loading' | 'landing' | 'planner'>('loading');
   const [mode, setMode] = useState<Mode>('none');
   const [mapStyle, setMapStyle] = useState<string>('mapbox://styles/mapbox/satellite-v9');
   const [unit, setUnit] = useState<'mm' | 'km' | 'ft' | 'mi'>('ft');
+  const [is3D, setIs3D] = useState(false);
   const [isPanelVisible, setIsPanelVisible] = useState(false);
   const [siteStyle, setSiteStyle] = useState({
     strokeColor: '#ffffff',
@@ -34,7 +28,6 @@ function App() {
   const [polygonResult, setPolygonResult] = useState<{ areaSqMeters: number; vertices: [number, number][] } | null>(null);
   const [clicks, setClicks] = useState<[number, number][]>([]);
   const [planName, setPlanName] = useState<string>('Unnamed Plan');
-  const [historyVersion, setHistoryVersion] = useState(0); // Used to trigger SidePanel refresh
   const [zoomTrigger, setZoomTrigger] = useState(0); // Signal map to fly to site
 
   // Environmental Analysis States
@@ -123,25 +116,12 @@ function App() {
     const selfSufficientUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
     window.history.pushState({}, '', selfSufficientUrl);
 
-    // Save to Local Storage History (Automatically on Share)
     try {
-      const historyStr = localStorage.getItem('site_planner_history') || '[]';
-      const history = JSON.parse(historyStr);
-      const newPlan: SavedPlan = {
-        id: crypto.randomUUID(),
-        name: finalName,
-        data: planData,
-        created_at: new Date().toISOString()
-      };
-      history.unshift(newPlan);
-      localStorage.setItem('site_planner_history', JSON.stringify(history.slice(0, 50)));
-      setHistoryVersion(v => v + 1);
-
       // Copy to clipboard
       navigator.clipboard.writeText(selfSufficientUrl);
-      alert('Link generated and copied to clipboard! Plan also saved to your local history.');
+      alert('Link generated and copied to clipboard!');
     } catch (e) {
-      console.error('Failed to save to local storage', e);
+      console.error('Failed to copy to clipboard', e);
     }
   };
 
@@ -196,15 +176,6 @@ function App() {
       }
     };
     reader.readAsText(file);
-  };
-
-  const loadFromHistory = (plan: SavedPlan) => {
-    applyPlanData(plan.data);
-    setZoomTrigger(v => v + 1);
-    setIsPanelVisible(true);
-    const encoded = LZString.compressToEncodedURIComponent(JSON.stringify(plan.data));
-    const newUrl = `${window.location.origin}${window.location.pathname}?s=${encoded}`;
-    window.history.pushState({}, '', newUrl);
   };
 
   const loadFromPastedCoordinates = (text: string) => {
@@ -309,6 +280,8 @@ function App() {
         setMapStyle={setMapStyle}
         unit={unit}
         setUnit={setUnit}
+        is3D={is3D}
+        setIs3D={setIs3D}
         onClear={handleClear}
         onShare={handleShare}
         onExport={handleExport}
@@ -320,6 +293,7 @@ function App() {
         mode={mode}
         mapStyle={mapStyle}
         unit={unit}
+        is3D={is3D}
         siteStyle={siteStyle}
         setSiteStyle={setSiteStyle}
         onRulerResult={handleRulerResult}
@@ -346,10 +320,8 @@ function App() {
           setHasClickedAnalysis(true);
         }}
         showAnalysisTooltip={showAnalysisTooltip}
-        onLoadHistory={loadFromHistory}
         onLoadFromPastedCoordinates={loadFromPastedCoordinates}
         planName={planName}
-        historyVersion={historyVersion}
         timeOfDay={timeOfDay}
         setTimeOfDay={setTimeOfDay}
         showSolar={showSolar}

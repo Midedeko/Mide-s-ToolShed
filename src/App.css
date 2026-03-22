@@ -1593,7 +1593,7 @@ button.loading {
 
   /* --- Planner Specific Mobile Overrides (Horizontal Toolbar) --- */
   .planner-view .toolbar {
-    bottom: 40px !important;
+    bottom: 100px !important; /* Increased to avoid mobile nav bars */
     left: 50% !important;
     transform: translateX(-50%) !important;
     width: 85.5vw !important;
@@ -1603,6 +1603,38 @@ button.loading {
     align-items: stretch !important;
     padding: 0 !important;
     gap: 0 !important;
+  }
+
+  .planner-view .side-panel .peg-action-btn {
+    border-left: 2px solid white !important; /* Visual separator */
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 0 12px !important;
+  }
+
+  .planner-view .copy-pegs-btn {
+    border: 2px solid white !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .hints-tab {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px; /* Added padding for spacing */
+  }
+
+  .hint-item {
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: #cbd5e1;
+  }
+
+  .hint-item strong {
+    color: #38bdf8;
   }
 
   .planner-view .search-trigger-btn {
