@@ -139,6 +139,20 @@ const Map: React.FC<MapProps> = ({
         }
       });
 
+      // Ground Path (Shadow/Trace)
+      map.addLayer({
+        id: 'celestial-trace-ground',
+        type: 'line',
+        source: 'analysis',
+        filter: ['==', 'type', 'celestial-trace-ground'],
+        paint: {
+          'line-color': ['get', 'color'],
+          'line-width': 1,
+          'line-dasharray': [2, 2],
+          'line-opacity': 0.4
+        }
+      });
+
       map.addLayer({
         id: 'celestial-arc-3d',
         type: 'fill-extrusion',
@@ -148,7 +162,7 @@ const Map: React.FC<MapProps> = ({
           'fill-extrusion-color': ['get', 'color'],
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': ['get', 'base-height'],
-          'fill-extrusion-opacity': 0.8
+          'fill-extrusion-opacity': 0.7
         }
       });
 
@@ -161,8 +175,7 @@ const Map: React.FC<MapProps> = ({
           'fill-extrusion-color': ['get', 'color'],
           'fill-extrusion-height': ['get', 'height'],
           'fill-extrusion-base': ['get', 'base-height'],
-          'fill-extrusion-opacity': 1,
-          'fill-extrusion-translate': [0, 0]
+          'fill-extrusion-opacity': 1
         }
       });
 
@@ -633,9 +646,16 @@ const Map: React.FC<MapProps> = ({
                             const pt1 = turf.destination(centerPoint, d1, mapBearing1, { units: 'meters' });
                             const pt2 = turf.destination(centerPoint, d2, mapBearing2, { units: 'meters' });
 
-                            // Create a thin segment (ribbon)
+                            // Add a ground trace feature for visibility
+                            analysisFeatures.push({
+                              type: 'Feature',
+                              properties: { type: 'celestial-trace-ground', color: bodyColor },
+                              geometry: { type: 'LineString', coordinates: [pt1.geometry.coordinates, pt2.geometry.coordinates] }
+                            });
+
+                            // Create a thicker ribbon segment (2m wide)
                             const line = turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]);
-                            const thickLine = turf.buffer(line, 0.5, { units: 'meters' });
+                            const thickLine = turf.buffer(line, 1.0, { units: 'meters' });
 
                             if (thickLine) {
                                 analysisFeatures.push({
@@ -664,15 +684,16 @@ const Map: React.FC<MapProps> = ({
                         const d = compassRadius * Math.cos(sunPos.altitude);
                         const height = compassRadius * Math.sin(sunPos.altitude);
                         const sunPt = turf.destination(centerPoint, d, sunMapBearing, { units: 'meters' });
-                        const sunBall = turf.circle(sunPt.geometry.coordinates as [number, number], 2.5, { steps: 8, units: 'meters' });
+                        // Larger icon (4m ball)
+                        const sunBall = turf.circle(sunPt.geometry.coordinates as [number, number], 4.0, { steps: 16, units: 'meters' });
 
                         analysisFeatures.push({
                             type: 'Feature',
                             properties: { 
                                 type: 'celestial-icon-3d', 
                                 color: bodyColor, 
-                                height: height + 2, 
-                                'base-height': height - 2 
+                                height: height + 3, 
+                                'base-height': height - 3 
                             },
                             geometry: sunBall.geometry
                         });
@@ -698,8 +719,15 @@ const Map: React.FC<MapProps> = ({
                         const pt1 = turf.destination(centerPoint, d1, (pos1.azimuth * 180 / Math.PI) + 180, { units: 'meters' });
                         const pt2 = turf.destination(centerPoint, d2, (pos2.azimuth * 180 / Math.PI) + 180, { units: 'meters' });
 
+                        // Add ground trace
+                        analysisFeatures.push({
+                          type: 'Feature',
+                          properties: { type: 'celestial-trace-ground', color: bodyColor },
+                          geometry: { type: 'LineString', coordinates: [pt1.geometry.coordinates, pt2.geometry.coordinates] }
+                        });
+
                         const line = turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]);
-                        const thickLine = turf.buffer(line, 0.5, { units: 'meters' });
+                        const thickLine = turf.buffer(line, 1.0, { units: 'meters' });
 
                         if (thickLine) {
                             analysisFeatures.push({
@@ -726,15 +754,16 @@ const Map: React.FC<MapProps> = ({
                     const d = compassRadius * Math.cos(mPos.altitude);
                     const height = compassRadius * Math.sin(mPos.altitude);
                     const mPt = turf.destination(centerPoint, d, (mPos.azimuth * 180 / Math.PI) + 180, { units: 'meters' });
-                    const mBall = turf.circle(mPt.geometry.coordinates as [number, number], 2.5, { steps: 8, units: 'meters' });
+                    // Larger icon (4m ball)
+                    const mBall = turf.circle(mPt.geometry.coordinates as [number, number], 4.0, { steps: 16, units: 'meters' });
 
                     analysisFeatures.push({
                         type: 'Feature',
                         properties: { 
                             type: 'celestial-icon-3d', 
                             color: bodyColor, 
-                            height: height + 2, 
-                            'base-height': height - 2 
+                            height: height + 3, 
+                            'base-height': height - 3 
                         },
                         geometry: mBall.geometry
                     });
