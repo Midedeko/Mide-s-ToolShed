@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import type { CelestialBody } from '../App';
 
 interface ResultProps {
     mode: 'none' | 'ruler' | 'polygon';
@@ -11,10 +12,8 @@ interface ResultProps {
     onLoadFromPastedCoordinates: (text: string) => void;
     planName: string;
     showAnalysisTooltip: boolean;
-    timeOfDay: number;
-    setTimeOfDay: (time: number) => void;
-    showSolar: boolean;
-    setShowSolar: (show: boolean) => void;
+    celestialBodies: CelestialBody[];
+    setCelestialBodies: React.Dispatch<React.SetStateAction<CelestialBody[]>>;
     showWind: boolean;
     setShowWind: (show: boolean) => void;
     windData: { dominantDirection: number; speed: number } | null;
@@ -23,7 +22,7 @@ interface ResultProps {
 const SidePanel: React.FC<ResultProps> = ({
     isVisible, onToggleVisible, onLoadFromPastedCoordinates, planName,
     showAnalysisTooltip,
-    timeOfDay, setTimeOfDay, showSolar, setShowSolar, showWind, setShowWind, windData, clicks, mode, rulerResult, polygonResult, unit
+    celestialBodies, setCelestialBodies, showWind, setShowWind, windData, clicks, mode, rulerResult, polygonResult, unit
 }) => {
     const [activeTab, setActiveTab] = useState<'details' | 'hints' | 'analysis'>('details');
     const [pastedCoords, setPastedCoords] = useState('');
@@ -193,29 +192,88 @@ const SidePanel: React.FC<ResultProps> = ({
                         <p className="hint" style={{ marginTop: 0, textAlign: 'left' }}>Toggle and configure environmental overlays.</p>
 
                         <div className="result-section" style={{ marginTop: '24px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                                <h4>Solar Path</h4>
-                                <label className="switch">
-                                    <input type="checkbox" checked={showSolar} onChange={(e) => setShowSolar(e.target.checked)} />
-                                    <span className="slider round"></span>
-                                </label>
+                            <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                <button className="add-body-btn" onClick={() => {
+                                    setCelestialBodies([...celestialBodies, {
+                                        id: crypto.randomUUID(),
+                                        type: 'sun',
+                                        time: 12,
+                                        date: new Date().toISOString().split('T')[0]
+                                    }]);
+                                }} style={{ 
+                                    flex: 1, background: 'white', color: 'black', border: 'none', padding: '8px', 
+                                    fontSize: '0.6rem', fontWeight: 'bold', cursor: 'pointer' 
+                                }}>+ SUN</button>
+                                <button className="add-body-btn" onClick={() => {
+                                    setCelestialBodies([...celestialBodies, {
+                                        id: crypto.randomUUID(),
+                                        type: 'moon',
+                                        time: 12,
+                                        date: new Date().toISOString().split('T')[0]
+                                    }]);
+                                }} style={{ 
+                                    flex: 1, background: 'rgba(255,255,255,0.1)', color: 'white', border: '1px solid white', 
+                                    padding: '8px', fontSize: '0.6rem', fontWeight: 'bold', cursor: 'pointer' 
+                                }}>+ MOON</button>
                             </div>
 
-                            {showSolar && (
-                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '16px', borderRadius: '0' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                                        <span>Time of Day</span>
-                                        <strong>{formatTime(timeOfDay)}</strong>
+                            <div className="bodies-list" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                {celestialBodies.map(body => (
+                                    <div key={body.id} className="body-card" style={{ 
+                                        background: 'rgba(255,255,255,0.05)', padding: '12px', marginBottom: '12px', 
+                                        border: '1px solid rgba(255,255,255,0.1)' 
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                                            <span style={{ fontWeight: 'bold', fontSize: '0.7rem', color: body.type === 'sun' ? '#fde047' : '#cbd5e1' }}>
+                                                {body.type.toUpperCase()}
+                                            </span>
+                                            <button 
+                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0, fontSize: '0.65rem' }}
+                                                onClick={() => setCelestialBodies(celestialBodies.filter(b => b.id !== body.id))}
+                                            >
+                                                REMOVE
+                                            </button>
+                                        </div>
+                                        <div className="body-row" style={{ marginBottom: '12px' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                <span style={{ fontSize: '0.65rem' }}>Time</span>
+                                                <strong style={{ fontSize: '0.65rem' }}>{formatTime(body.time)}</strong>
+                                            </div>
+                                            <input 
+                                                type="range" min="0" max="23.9" step="0.1" 
+                                                value={body.time} 
+                                                onChange={(e) => {
+                                                    setCelestialBodies(celestialBodies.map(b => 
+                                                        b.id === body.id ? { ...b, time: parseFloat(e.target.value) } : b
+                                                    ));
+                                                }}
+                                                style={{ width: '100%', accentColor: body.type === 'sun' ? '#fde047' : '#cbd5e1' }}
+                                            />
+                                        </div>
+                                        <div className="body-row">
+                                            <label style={{ display: 'block', fontSize: '0.65rem', marginBottom: '4px' }}>Date</label>
+                                            <input 
+                                                type="date" 
+                                                value={body.date}
+                                                onChange={(e) => {
+                                                    setCelestialBodies(celestialBodies.map(b => 
+                                                        b.id === body.id ? { ...b, date: e.target.value } : b
+                                                    ));
+                                                }}
+                                                style={{ 
+                                                    width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.2)', 
+                                                    color: 'white', fontSize: '0.7rem', padding: '6px', fontFamily: 'CodeSaver, monospace' 
+                                                }}
+                                            />
+                                        </div>
                                     </div>
-                                    <input
-                                        type="range"
-                                        min="0" max="23.9" step="0.1"
-                                        value={timeOfDay}
-                                        onChange={(e) => setTimeOfDay(parseFloat(e.target.value))}
-                                        style={{ width: '100%', accentColor: '#eab308' }}
-                                    />
-                                </div>
-                            )}
+                                ))}
+                                {celestialBodies.length === 0 && (
+                                    <p style={{ fontSize: '0.7rem', color: '#64748b', textAlign: 'center', padding: '20px 0' }}>
+                                        No celestial instances added.
+                                    </p>
+                                )}
+                            </div>
                         </div>
 
                         <div className="result-section" style={{ marginTop: '32px' }}>

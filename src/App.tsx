@@ -11,6 +11,13 @@ import { Agentation } from 'agentation';
 
 type Mode = 'none' | 'ruler' | 'polygon';
 
+export interface CelestialBody {
+  id: string;
+  type: 'sun' | 'moon';
+  time: number; // 0-24
+  date: string; // ISO yyyy-mm-dd
+}
+
 function App() {
   const [view, setView] = useState<'loading' | 'landing' | 'planner'>('loading');
   const [mode, setMode] = useState<Mode>('none');
@@ -31,8 +38,7 @@ function App() {
   const [zoomTrigger, setZoomTrigger] = useState(0); // Signal map to fly to site
 
   // Environmental Analysis States
-  const [timeOfDay, setTimeOfDay] = useState<number>(12); // Noon
-  const [showSolar, setShowSolar] = useState<boolean>(false);
+  const [celestialBodies, setCelestialBodies] = useState<CelestialBody[]>([]);
   const [showWind, setShowWind] = useState<boolean>(false);
   const [windData, setWindData] = useState<{ dominantDirection: number; speed: number } | null>(null);
   const [showAnalysisTooltip, setShowAnalysisTooltip] = useState(false);
@@ -301,8 +307,7 @@ function App() {
         clicks={clicks}
         setClicks={setClicks}
         zoomTrigger={zoomTrigger}
-        timeOfDay={timeOfDay}
-        showSolar={showSolar}
+        celestialBodies={celestialBodies}
         showWind={showWind}
         windData={windData}
       />
@@ -322,10 +327,8 @@ function App() {
         showAnalysisTooltip={showAnalysisTooltip}
         onLoadFromPastedCoordinates={loadFromPastedCoordinates}
         planName={planName}
-        timeOfDay={timeOfDay}
-        setTimeOfDay={setTimeOfDay}
-        showSolar={showSolar}
-        setShowSolar={setShowSolar}
+        celestialBodies={celestialBodies}
+        setCelestialBodies={setCelestialBodies}
         showWind={showWind}
         setShowWind={setShowWind}
         windData={windData}

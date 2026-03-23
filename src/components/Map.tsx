@@ -8,6 +8,7 @@ import SunCalc from 'suncalc';
 
 type Mode = 'none' | 'ruler' | 'polygon';
 type Unit = 'mm' | 'km' | 'ft' | 'mi';
+import type { CelestialBody } from '../App';
 
 interface SiteStyle {
   strokeColor: string;
@@ -28,8 +29,7 @@ interface MapProps {
   clicks: [number, number][];
   setClicks: React.Dispatch<React.SetStateAction<[number, number][]>>;
   zoomTrigger: number;
-  timeOfDay: number;
-  showSolar: boolean;
+  celestialBodies: CelestialBody[];
   showWind: boolean;
   windData: { dominantDirection: number; speed: number } | null;
 }
@@ -37,7 +37,7 @@ interface MapProps {
 const Map: React.FC<MapProps> = ({
   mode, mapStyle, unit, is3D, siteStyle, setSiteStyle,
   onRulerResult, onPolygonResult, clicks, setClicks, zoomTrigger,
-  timeOfDay, showSolar, showWind, windData
+  celestialBodies, showWind, windData
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -135,7 +135,7 @@ const Map: React.FC<MapProps> = ({
         source: 'analysis',
         filter: ['==', 'type', 'solar-arc'],
         paint: {
-          'line-color': '#fde047',
+          'line-color': ['get', 'color'],
           'line-width': 2,
         }
       });
@@ -146,11 +146,11 @@ const Map: React.FC<MapProps> = ({
         source: 'analysis',
         filter: ['==', 'type', 'sun-icon'],
         paint: {
-          'circle-color': '#fde047',
+          'circle-color': ['get', 'color'],
           'circle-radius': 8,
-          'circle-stroke-color': '#ca8a04',
-          'circle-stroke-width': 2,
-          'circle-blur': 0.2
+          'circle-stroke-color': 'rgba(255,255,255,0.3)',
+          'circle-stroke-width': 1,
+          'circle-blur': 0.1
         }
       });
 
@@ -584,57 +584,105 @@ const Map: React.FC<MapProps> = ({
           }
         }
 
-        const date = new Date();
         const lat = centerPoint[1];
         const lng = centerPoint[0];
 
-        // 1. Solar Path
-        if (showSolar) {
-          const times = SunCalc.getTimes(date, lat, lng);
-          const sunrise = times.sunrise;
-          const sunset = times.sunset;
+        // 1. Celestial Bodies (Sun/Moon)
+        celestialBodies.forEach(body => {
+            const bodyDate = new Date(body.date);
+            const bodyColor = body.type === 'sun' ? '#fde047' : '#cbd5e1';
 
-          if (sunrise && sunset) {
-            const arcPoints = [];
-            // Dynamically calculate steps based on radius for extra smoothness
-            const steps = Math.min(2000, Math.max(120, Math.floor(compassRadius * 2)));
-            const startTime = sunrise.getTime();
-            const endTime = sunset.getTime();
+            if (body.type === 'sun') {
+                const times = SunCalc.getTimes(bodyDate, lat, lng);
+                const sunrise = times.sunrise;
+                const sunset = times.sunset;
 
-            for (let i = 0; i <= steps; i++) {
-              const t = new Date(startTime + (endTime - startTime) * (i / steps));
-              const pos = SunCalc.getPosition(t, lat, lng);
-              const azimuthDegrees = (pos.azimuth * 180) / Math.PI;
-              const mapBearing = azimuthDegrees + 180;
-              const dest = turf.destination(centerPoint, radiusMeters, mapBearing, { units: 'meters' });
-              arcPoints.push(dest.geometry.coordinates);
+                if (sunrise && sunset) {
+                    const arcPoints = [];
+                    const steps = Math.min(2000, Math.max(120, Math.floor(compassRadius * 2)));
+                    const startTime = sunrise.getTime();
+                    const endTime = sunset.getTime();
+
+                    for (let i = 0; i <= steps; i++) {
+                        const t = new Date(startTime + (endTime - startTime) * (i / steps));
+                        const pos = SunCalc.getPosition(t, lat, lng);
+                        const azimuthDegrees = (pos.azimuth * 180) / Math.PI;
+                        const mapBearing = azimuthDegrees + 180;
+                        const dest = turf.destination(centerPoint, radiusMeters, mapBearing, { units: 'meters' });
+                        arcPoints.push(dest.geometry.coordinates);
+                    }
+
+                    analysisFeatures.push({
+                        type: 'Feature',
+                        properties: { type: 'solar-arc', color: bodyColor },
+                        geometry: { type: 'LineString', coordinates: arcPoints }
+                    });
+
+                    // Current Sun Position
+                    const h = Math.floor(body.time);
+                    const m = Math.round((body.time - h) * 60);
+                    const sunTime = new Date(bodyDate);
+                    sunTime.setHours(h, m, 0, 0);
+
+                    // Only show if day
+                    if (sunTime >= sunrise && sunTime <= sunset) {
+                        const sunPos = SunCalc.getPosition(sunTime, lat, lng);
+                        const sunAzimuthDegrees = (sunPos.azimuth * 180) / Math.PI;
+                        const sunMapBearing = sunAzimuthDegrees + 180;
+                        const sunDest = turf.destination(centerPoint, radiusMeters, sunMapBearing, { units: 'meters' });
+
+                        analysisFeatures.push({
+                            type: 'Feature',
+                            properties: { type: 'sun-icon', color: bodyColor },
+                            geometry: sunDest.geometry
+                        });
+                    }
+                }
+            } else if (body.type === 'moon') {
+                // Moon Path - Iterate through 24h to find visibility
+                const arcPoints = [];
+                const steps = Math.min(1000, Math.max(120, Math.floor(compassRadius)));
+                const baseTime = new Date(bodyDate).setHours(0,0,0,0);
+
+                for (let i = 0; i <= steps; i++) {
+                    const t = new Date(baseTime + (24 * 3600 * i * 1000 / steps));
+                    const pos = SunCalc.getMoonPosition(t, lat, lng);
+                    if (pos.altitude > 0) {
+                        const azimuthDegrees = (pos.azimuth * 180) / Math.PI;
+                        const mapBearing = azimuthDegrees + 180;
+                        const dest = turf.destination(centerPoint, radiusMeters, mapBearing, { units: 'meters' });
+                        arcPoints.push(dest.geometry.coordinates);
+                    }
+                }
+
+                if (arcPoints.length > 0) {
+                    analysisFeatures.push({
+                        type: 'Feature',
+                        properties: { type: 'solar-arc', color: bodyColor },
+                        geometry: { type: 'LineString', coordinates: arcPoints }
+                    });
+                }
+
+                // Current Moon Position
+                const h = Math.floor(body.time);
+                const m = Math.round((body.time - h) * 60);
+                const moonTime = new Date(bodyDate);
+                moonTime.setHours(h, m, 0, 0);
+
+                const mPos = SunCalc.getMoonPosition(moonTime, lat, lng);
+                if (mPos.altitude > 0) {
+                    const mAzimuthDegrees = (mPos.azimuth * 180) / Math.PI;
+                    const mMapBearing = mAzimuthDegrees + 180;
+                    const mDest = turf.destination(centerPoint, radiusMeters, mMapBearing, { units: 'meters' });
+
+                    analysisFeatures.push({
+                        type: 'Feature',
+                        properties: { type: 'sun-icon', color: bodyColor },
+                        geometry: mDest.geometry
+                    });
+                }
             }
-
-            analysisFeatures.push({
-              type: 'Feature',
-              properties: { type: 'solar-arc' },
-              geometry: { type: 'LineString', coordinates: arcPoints }
-            });
-
-            const Math_floor = Math.floor(timeOfDay);
-            const mins = Math.round((timeOfDay - Math_floor) * 60);
-            const sunTime = new Date(date);
-            sunTime.setHours(Math_floor, mins, 0, 0);
-
-            if (sunTime >= sunrise && sunTime <= sunset) {
-              const sunPos = SunCalc.getPosition(sunTime, lat, lng);
-              const sunAzimuthDegrees = (sunPos.azimuth * 180) / Math.PI;
-              const sunMapBearing = sunAzimuthDegrees + 180;
-              const sunDest = turf.destination(centerPoint, radiusMeters, sunMapBearing, { units: 'meters' });
-
-              analysisFeatures.push({
-                type: 'Feature',
-                properties: { type: 'sun-icon' },
-                geometry: sunDest.geometry
-              });
-            }
-          }
-        }
+        });
 
         // 2. Wind Rose Diagram
         if (showWind && windData) {
@@ -655,7 +703,7 @@ const Map: React.FC<MapProps> = ({
       }
       analysisSource.setData({ type: 'FeatureCollection', features: analysisFeatures });
     }
-  }, [clicks, unit, mapStyle, isMapLoaded, renderTrigger, timeOfDay, showSolar, showWind, windData]);
+  }, [clicks, unit, mapStyle, isMapLoaded, renderTrigger, celestialBodies, showWind, windData]);
 
   // Explicit Auto-Transport (Zoom to Site)
   useEffect(() => {
