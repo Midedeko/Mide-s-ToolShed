@@ -224,7 +224,7 @@ const SidePanel: React.FC<ResultProps> = ({
                                         border: '1px solid rgba(255,255,255,0.1)' 
                                     }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                                            <span style={{ fontWeight: 'bold', fontSize: '0.7rem', color: body.type === 'sun' ? '#fde047' : '#cbd5e1' }}>
+                                            <span style={{ fontWeight: 'bold', fontSize: '0.7rem', color: body.type === 'sun' ? '#fde047' : '#ffffff' }}>
                                                 {body.type.toUpperCase()}
                                             </span>
                                             <button 

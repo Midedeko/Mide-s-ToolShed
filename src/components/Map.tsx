@@ -9,6 +9,7 @@ import SunCalc from 'suncalc';
 type Mode = 'none' | 'ruler' | 'polygon';
 type Unit = 'mm' | 'km' | 'ft' | 'mi';
 import type { CelestialBody } from '../App';
+mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN;
 
 interface SiteStyle {
   strokeColor: string;
@@ -44,6 +45,7 @@ const Map: React.FC<MapProps> = ({
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const hudLabelsRef = useRef<mapboxgl.Marker[]>([]);
+  const celestialMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -129,55 +131,20 @@ const Map: React.FC<MapProps> = ({
         }
       });
 
-      map.addLayer({
-        id: 'sky',
-        type: 'sky',
-        paint: {
-          'sky-type': 'atmosphere',
-          'sky-atmosphere-sun': [0.0, 0.0],
-          'sky-atmosphere-sun-intensity': 15
-        }
-      });
-
-      // Ground Path (Shadow/Trace)
-      map.addLayer({
-        id: 'celestial-trace-ground',
-        type: 'line',
-        source: 'analysis',
-        filter: ['==', 'type', 'celestial-trace-ground'],
-        paint: {
-          'line-color': ['get', 'color'],
-          'line-width': 1,
-          'line-dasharray': [2, 2],
-          'line-opacity': 0.4
-        }
-      });
-
-      map.addLayer({
-        id: 'celestial-arc-3d',
-        type: 'fill-extrusion',
-        source: 'analysis',
-        filter: ['==', 'type', 'celestial-arc-3d'],
-        paint: {
-          'fill-extrusion-color': ['get', 'color'],
-          'fill-extrusion-height': ['get', 'height'],
-          'fill-extrusion-base': ['get', 'base-height'],
-          'fill-extrusion-opacity': 0.7
-        }
-      });
-
-      map.addLayer({
-        id: 'celestial-icon-3d',
-        type: 'fill-extrusion',
-        source: 'analysis',
-        filter: ['==', 'type', 'celestial-icon-3d'],
-        paint: {
-          'fill-extrusion-color': ['get', 'color'],
-          'fill-extrusion-height': ['get', 'height'],
-          'fill-extrusion-base': ['get', 'base-height'],
-          'fill-extrusion-opacity': 1
-        }
-      });
+      if (!map.getLayer('celestial-arc')) {
+        map.addLayer({
+          id: 'celestial-arc',
+          type: 'fill-extrusion',
+          source: 'analysis',
+          filter: ['==', 'type', 'celestial-arc'],
+          paint: {
+            'fill-extrusion-color': ['get', 'color'],
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': ['get', 'base-height'],
+            'fill-extrusion-opacity': 0.9
+          }
+        });
+      }
 
       // --- Compass HUD Layers ---
       map.addLayer({
@@ -612,10 +579,14 @@ const Map: React.FC<MapProps> = ({
         const lat = centerPoint[1];
         const lng = centerPoint[0];
 
+        // Clear any previous celestial HTML markers
+        celestialMarkersRef.current.forEach(m => m.remove());
+        celestialMarkersRef.current = [];
+
         // 1. Celestial Bodies (Sun/Moon)
         celestialBodies.forEach(body => {
             const bodyDate = new Date(body.date);
-            const bodyColor = body.type === 'sun' ? '#fde047' : '#cbd5e1';
+            const bodyColor = body.type === 'sun' ? '#fde047' : '#ffffff';
 
             if (body.type === 'sun') {
                 const times = SunCalc.getTimes(bodyDate, lat, lng);
@@ -623,150 +594,120 @@ const Map: React.FC<MapProps> = ({
                 const sunset = times.sunset;
 
                 if (sunrise && sunset) {
-                    const steps = 120; // Enough for a smooth ribbon
+                    // Steps scale with radius: more steps = smoother arc
+                    const steps = Math.min(2000, Math.max(200, Math.floor(compassRadius * 4)));
                     const startTime = sunrise.getTime();
                     const endTime = sunset.getTime();
 
                     for (let i = 0; i < steps; i++) {
                         const t1 = new Date(startTime + (endTime - startTime) * (i / steps));
                         const t2 = new Date(startTime + (endTime - startTime) * ((i + 1) / steps));
-                        
                         const pos1 = SunCalc.getPosition(t1, lat, lng);
                         const pos2 = SunCalc.getPosition(t2, lat, lng);
 
                         if (pos1.altitude > 0 && pos2.altitude > 0) {
-                            const mapBearing1 = (pos1.azimuth * 180 / Math.PI) + 180;
-                            const mapBearing2 = (pos2.azimuth * 180 / Math.PI) + 180;
-                            
+                            const b1 = (pos1.azimuth * 180 / Math.PI) + 180;
+                            const b2 = (pos2.azimuth * 180 / Math.PI) + 180;
                             const d1 = compassRadius * Math.cos(pos1.altitude);
-                            const h1 = compassRadius * Math.sin(pos1.altitude);
                             const d2 = compassRadius * Math.cos(pos2.altitude);
+                            const h1 = compassRadius * Math.sin(pos1.altitude);
                             const h2 = compassRadius * Math.sin(pos2.altitude);
 
-                            const pt1 = turf.destination(centerPoint, d1, mapBearing1, { units: 'meters' });
-                            const pt2 = turf.destination(centerPoint, d2, mapBearing2, { units: 'meters' });
+                            const pt1 = turf.destination(centerPoint, d1, b1, { units: 'meters' });
+                            const pt2 = turf.destination(centerPoint, d2, b2, { units: 'meters' });
 
-                            // Add a ground trace feature for visibility
-                            analysisFeatures.push({
-                              type: 'Feature',
-                              properties: { type: 'celestial-trace-ground', color: bodyColor },
-                              geometry: { type: 'LineString', coordinates: [pt1.geometry.coordinates, pt2.geometry.coordinates] }
-                            });
-
-                            // Create a thicker ribbon segment (2m wide)
-                            const line = turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]);
-                            const thickLine = turf.buffer(line, 1.0, { units: 'meters' });
-
-                            if (thickLine) {
+                            // Very thin buffer — visually a line, but carries 3D height
+                            const segment = turf.buffer(
+                                turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]),
+                                0.1, { units: 'meters' }
+                            );
+                            if (segment) {
                                 analysisFeatures.push({
                                     type: 'Feature',
-                                    properties: { 
-                                        type: 'celestial-arc-3d', 
-                                        color: bodyColor, 
+                                    properties: {
+                                        type: 'celestial-arc',
+                                        color: bodyColor,
                                         height: Math.max(h1, h2),
                                         'base-height': Math.min(h1, h2)
                                     },
-                                    geometry: thickLine.geometry
+                                    geometry: segment.geometry
                                 });
                             }
                         }
                     }
-
-                    // Current Sun Position
-                    const h = Math.floor(body.time);
-                    const m = Math.round((body.time - h) * 60);
-                    const sunTime = new Date(bodyDate);
-                    sunTime.setHours(h, m, 0, 0);
-
-                    if (sunTime >= sunrise && sunTime <= sunset) {
-                        const sunPos = SunCalc.getPosition(sunTime, lat, lng);
-                        const sunMapBearing = (sunPos.azimuth * 180 / Math.PI) + 180;
-                        const d = compassRadius * Math.cos(sunPos.altitude);
-                        const height = compassRadius * Math.sin(sunPos.altitude);
-                        const sunPt = turf.destination(centerPoint, d, sunMapBearing, { units: 'meters' });
-                        // Larger icon (4m ball)
-                        const sunBall = turf.circle(sunPt.geometry.coordinates as [number, number], 4.0, { steps: 16, units: 'meters' });
-
-                        analysisFeatures.push({
-                            type: 'Feature',
-                            properties: { 
-                                type: 'celestial-icon-3d', 
-                                color: bodyColor, 
-                                height: height + 3, 
-                                'base-height': height - 3 
-                            },
-                            geometry: sunBall.geometry
-                        });
-                    }
                 }
             } else if (body.type === 'moon') {
-                const steps = 150;
-                const baseTime = new Date(bodyDate).setHours(0,0,0,0);
+                const steps = Math.min(2000, Math.max(200, Math.floor(compassRadius * 4)));
+                const baseTime = new Date(bodyDate).setHours(0, 0, 0, 0);
 
                 for (let i = 0; i < steps; i++) {
-                    const t1 = new Date(baseTime + (24 * 3600 * i * 1000 / steps));
-                    const t2 = new Date(baseTime + (24 * 3600 * (i + 1) * 1000 / steps));
-                    
+                    const t1 = new Date(baseTime + (24 * 3600 * 1000 * i / steps));
+                    const t2 = new Date(baseTime + (24 * 3600 * 1000 * (i + 1) / steps));
                     const pos1 = SunCalc.getMoonPosition(t1, lat, lng);
                     const pos2 = SunCalc.getMoonPosition(t2, lat, lng);
-                    
+
                     if (pos1.altitude > 0 && pos2.altitude > 0) {
+                        const b1 = (pos1.azimuth * 180 / Math.PI) + 180;
+                        const b2 = (pos2.azimuth * 180 / Math.PI) + 180;
                         const d1 = compassRadius * Math.cos(pos1.altitude);
-                        const h1 = compassRadius * Math.sin(pos1.altitude);
                         const d2 = compassRadius * Math.cos(pos2.altitude);
+                        const h1 = compassRadius * Math.sin(pos1.altitude);
                         const h2 = compassRadius * Math.sin(pos2.altitude);
 
-                        const pt1 = turf.destination(centerPoint, d1, (pos1.azimuth * 180 / Math.PI) + 180, { units: 'meters' });
-                        const pt2 = turf.destination(centerPoint, d2, (pos2.azimuth * 180 / Math.PI) + 180, { units: 'meters' });
+                        const pt1 = turf.destination(centerPoint, d1, b1, { units: 'meters' });
+                        const pt2 = turf.destination(centerPoint, d2, b2, { units: 'meters' });
 
-                        // Add ground trace
-                        analysisFeatures.push({
-                          type: 'Feature',
-                          properties: { type: 'celestial-trace-ground', color: bodyColor },
-                          geometry: { type: 'LineString', coordinates: [pt1.geometry.coordinates, pt2.geometry.coordinates] }
-                        });
-
-                        const line = turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]);
-                        const thickLine = turf.buffer(line, 1.0, { units: 'meters' });
-
-                        if (thickLine) {
+                        const segment = turf.buffer(
+                            turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]),
+                            0.1, { units: 'meters' }
+                        );
+                        if (segment) {
                             analysisFeatures.push({
                                 type: 'Feature',
-                                properties: { 
-                                    type: 'celestial-arc-3d', 
-                                    color: bodyColor, 
+                                properties: {
+                                    type: 'celestial-arc',
+                                    color: bodyColor,
                                     height: Math.max(h1, h2),
                                     'base-height': Math.min(h1, h2)
                                 },
-                                geometry: thickLine.geometry
+                                geometry: segment.geometry
                             });
                         }
                     }
                 }
+            }
 
-                const h = Math.floor(body.time);
-                const m = Math.round((body.time - h) * 60);
-                const moonTime = new Date(bodyDate);
-                moonTime.setHours(h, m, 0, 0);
+            // --- HTML Marker for current icon position (true 2D circle) ---
+            const map = mapRef.current;
+            if (map) {
+                const iconTime = new Date(bodyDate);
+                iconTime.setHours(Math.floor(body.time), Math.round((body.time % 1) * 60), 0, 0);
 
-                const mPos = SunCalc.getMoonPosition(moonTime, lat, lng);
-                if (mPos.altitude > 0) {
-                    const d = compassRadius * Math.cos(mPos.altitude);
-                    const height = compassRadius * Math.sin(mPos.altitude);
-                    const mPt = turf.destination(centerPoint, d, (mPos.azimuth * 180 / Math.PI) + 180, { units: 'meters' });
-                    // Larger icon (4m ball)
-                    const mBall = turf.circle(mPt.geometry.coordinates as [number, number], 4.0, { steps: 16, units: 'meters' });
+                const iconPos = body.type === 'sun'
+                    ? SunCalc.getPosition(iconTime, lat, lng)
+                    : SunCalc.getMoonPosition(iconTime, lat, lng);
 
-                    analysisFeatures.push({
-                        type: 'Feature',
-                        properties: { 
-                            type: 'celestial-icon-3d', 
-                            color: bodyColor, 
-                            height: height + 3, 
-                            'base-height': height - 3 
-                        },
-                        geometry: mBall.geometry
-                    });
+                if (iconPos.altitude > 0) {
+                    const bearing = (iconPos.azimuth * 180 / Math.PI) + 180;
+                    const d = compassRadius * Math.cos(iconPos.altitude);
+                    const iconPt = turf.destination(centerPoint, d, bearing, { units: 'meters' });
+                    const [iconLng, iconLat] = iconPt.geometry.coordinates as [number, number];
+
+                    const el = document.createElement('div');
+                    el.style.cssText = `
+                        width: 18px; height: 18px;
+                        border-radius: 50%;
+                        background: ${bodyColor};
+                        border: 2.5px solid rgba(255,255,255,0.8);
+                        box-shadow: 0 0 8px ${bodyColor};
+                        pointer-events: none;
+                    `;
+
+                    const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+                        .setLngLat([iconLng, iconLat])
+                        .addTo(map);
+
+                    celestialMarkersRef.current.push(marker);
                 }
             }
         });
