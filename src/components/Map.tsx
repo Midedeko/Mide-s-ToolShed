@@ -5,6 +5,8 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import '@mapbox/mapbox-gl-geocoder/dist/mapbox-gl-geocoder.css';
 import * as turf from '@turf/turf';
 import SunCalc from 'suncalc';
+import { Threebox } from 'threebox-plugin';
+import * as THREE from 'three';
 
 type Mode = 'none' | 'ruler' | 'polygon';
 type Unit = 'mm' | 'km' | 'ft' | 'mi';
@@ -33,19 +35,20 @@ interface MapProps {
   celestialBodies: CelestialBody[];
   showWind: boolean;
   windData: { dominantDirection: number; speed: number } | null;
+  editingPegIndex?: number | null;
+  setEditingPegIndex?: (index: number | null) => void;
 }
 
 const Map: React.FC<MapProps> = ({
   mode, mapStyle, unit, is3D, siteStyle, setSiteStyle,
   onRulerResult, onPolygonResult, clicks, setClicks, zoomTrigger,
-  celestialBodies, showWind, windData
+  celestialBodies, showWind, windData, editingPegIndex, setEditingPegIndex
 }) => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const markersRef = useRef<mapboxgl.Marker[]>([]);
   const searchMarkerRef = useRef<mapboxgl.Marker | null>(null);
   const hudLabelsRef = useRef<mapboxgl.Marker[]>([]);
-  const celestialMarkersRef = useRef<mapboxgl.Marker[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number } | null>(null);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [renderTrigger, setRenderTrigger] = useState(0);
@@ -131,17 +134,22 @@ const Map: React.FC<MapProps> = ({
         }
       });
 
-      if (!map.getLayer('celestial-arc')) {
+      if (!map.getLayer('custom-threebox-layer')) {
         map.addLayer({
-          id: 'celestial-arc',
-          type: 'fill-extrusion',
-          source: 'analysis',
-          filter: ['==', 'type', 'celestial-arc'],
-          paint: {
-            'fill-extrusion-color': ['get', 'color'],
-            'fill-extrusion-height': ['get', 'height'],
-            'fill-extrusion-base': ['get', 'base-height'],
-            'fill-extrusion-opacity': 0.9
+          id: 'custom-threebox-layer',
+          type: 'custom',
+          renderingMode: '3d',
+          onAdd: function (map: any, gl: any) {
+            (window as any).tb = new Threebox(
+              map,
+              gl,
+              { defaultLights: true }
+            );
+          },
+          render: function (gl: any, matrix: any) {
+            if ((window as any).tb) {
+              (window as any).tb.update();
+            }
           }
         });
       }
@@ -342,10 +350,10 @@ const Map: React.FC<MapProps> = ({
       const popupDiv = document.createElement('div');
       popupDiv.className = 'peg-delete-popup';
       popupDiv.innerHTML = `
-        <div style="font-size: 10px; margin-bottom: 8px; letter-spacing: 1px; font-weight: bold;">DELETE PEG?</div>
+        <div style="font-size: 10px; margin-bottom: 8px; letter-spacing: 1px; font-weight: bold;">UPDATE PEG</div>
         <div style="display: flex; gap: 8px;">
-          <button id="peg-yes-${i}" class="peg-delete-btn">YES</button>
-          <button id="peg-no-${i}" class="peg-delete-btn">NO</button>
+          <button id="peg-edit-${i}" class="peg-delete-btn">EDIT</button>
+          <button id="peg-delete-${i}" class="peg-delete-btn" style="background: #ef4444; color: white;">DEL</button>
         </div>
       `;
 
@@ -353,11 +361,13 @@ const Map: React.FC<MapProps> = ({
         .setDOMContent(popupDiv);
 
       popup.on('open', () => {
-        document.getElementById(`peg-yes-${i}`)?.addEventListener('click', () => {
-          setClicks(prev => prev.filter((_, idx) => idx !== i));
+        document.getElementById(`peg-edit-${i}`)?.addEventListener('click', () => {
+          if (setEditingPegIndex) setEditingPegIndex(i);
           popup.remove();
         });
-        document.getElementById(`peg-no-${i}`)?.addEventListener('click', () => {
+        document.getElementById(`peg-delete-${i}`)?.addEventListener('click', () => {
+          setClicks(prev => prev.filter((_, idx) => idx !== i));
+          if (setEditingPegIndex) setEditingPegIndex(null);
           popup.remove();
         });
       });
@@ -383,7 +393,7 @@ const Map: React.FC<MapProps> = ({
       });
       markersRef.current.push(marker);
     });
-  }, [clicks, isMapLoaded]);
+  }, [clicks, isMapLoaded, setEditingPegIndex]);
 
   // --- Result Calculation (Area / Distance) ---
   // Runs independently of Mapbox style loading to ensure UI sync
@@ -579,9 +589,10 @@ const Map: React.FC<MapProps> = ({
         const lat = centerPoint[1];
         const lng = centerPoint[0];
 
-        // Clear any previous celestial HTML markers
-        celestialMarkersRef.current.forEach(m => m.remove());
-        celestialMarkersRef.current = [];
+        // Clear Threebox layer
+        if ((window as any).tb) {
+            (window as any).tb.clear();
+        }
 
         // 1. Celestial Bodies (Sun/Moon)
         celestialBodies.forEach(body => {
@@ -590,96 +601,64 @@ const Map: React.FC<MapProps> = ({
 
             if (body.type === 'sun') {
                 const times = SunCalc.getTimes(bodyDate, lat, lng);
-                const sunrise = times.sunrise;
-                const sunset = times.sunset;
-
-                if (sunrise && sunset) {
-                    // Steps scale with radius: more steps = smoother arc
+                if (times.sunrise && times.sunset) {
                     const steps = Math.min(2000, Math.max(200, Math.floor(compassRadius * 4)));
-                    const startTime = sunrise.getTime();
-                    const endTime = sunset.getTime();
+                    const startTime = times.sunrise.getTime();
+                    const endTime = times.sunset.getTime();
+                    const arcPoints: number[][] = [];
 
-                    for (let i = 0; i < steps; i++) {
-                        const t1 = new Date(startTime + (endTime - startTime) * (i / steps));
-                        const t2 = new Date(startTime + (endTime - startTime) * ((i + 1) / steps));
-                        const pos1 = SunCalc.getPosition(t1, lat, lng);
-                        const pos2 = SunCalc.getPosition(t2, lat, lng);
+                    for (let i = 0; i <= steps; i++) {
+                        const t = new Date(startTime + (endTime - startTime) * (i / steps));
+                        const pos = SunCalc.getPosition(t, lat, lng);
 
-                        if (pos1.altitude > 0 && pos2.altitude > 0) {
-                            const b1 = (pos1.azimuth * 180 / Math.PI) + 180;
-                            const b2 = (pos2.azimuth * 180 / Math.PI) + 180;
-                            const d1 = compassRadius * Math.cos(pos1.altitude);
-                            const d2 = compassRadius * Math.cos(pos2.altitude);
-                            const h1 = compassRadius * Math.sin(pos1.altitude);
-                            const h2 = compassRadius * Math.sin(pos2.altitude);
-
-                            const pt1 = turf.destination(centerPoint, d1, b1, { units: 'meters' });
-                            const pt2 = turf.destination(centerPoint, d2, b2, { units: 'meters' });
-
-                            // Very thin buffer — visually a line, but carries 3D height
-                            const segment = turf.buffer(
-                                turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]),
-                                0.1, { units: 'meters' }
-                            );
-                            if (segment) {
-                                analysisFeatures.push({
-                                    type: 'Feature',
-                                    properties: {
-                                        type: 'celestial-arc',
-                                        color: bodyColor,
-                                        height: Math.max(h1, h2),
-                                        'base-height': Math.min(h1, h2)
-                                    },
-                                    geometry: segment.geometry
-                                });
-                            }
+                        if (pos.altitude > 0) {
+                            const bearing = (pos.azimuth * 180 / Math.PI) + 180;
+                            const d = compassRadius * Math.cos(pos.altitude);
+                            const h = compassRadius * Math.sin(pos.altitude);
+                            const pt = turf.destination(centerPoint, d, bearing, { units: 'meters' });
+                            arcPoints.push([pt.geometry.coordinates[0], pt.geometry.coordinates[1], h]);
                         }
+                    }
+
+                    if (arcPoints.length >= 2 && (window as any).tb) {
+                        const line = (window as any).tb.line({
+                            geometry: arcPoints,
+                            width: 3,
+                            color: bodyColor
+                        });
+                        (window as any).tb.add(line);
                     }
                 }
             } else if (body.type === 'moon') {
                 const steps = Math.min(2000, Math.max(200, Math.floor(compassRadius * 4)));
                 const baseTime = new Date(bodyDate).setHours(0, 0, 0, 0);
+                const arcPoints: number[][] = [];
 
-                for (let i = 0; i < steps; i++) {
-                    const t1 = new Date(baseTime + (24 * 3600 * 1000 * i / steps));
-                    const t2 = new Date(baseTime + (24 * 3600 * 1000 * (i + 1) / steps));
-                    const pos1 = SunCalc.getMoonPosition(t1, lat, lng);
-                    const pos2 = SunCalc.getMoonPosition(t2, lat, lng);
+                for (let i = 0; i <= steps; i++) {
+                    const t = new Date(baseTime + (24 * 3600 * 1000 * i / steps));
+                    const pos = SunCalc.getMoonPosition(t, lat, lng);
 
-                    if (pos1.altitude > 0 && pos2.altitude > 0) {
-                        const b1 = (pos1.azimuth * 180 / Math.PI) + 180;
-                        const b2 = (pos2.azimuth * 180 / Math.PI) + 180;
-                        const d1 = compassRadius * Math.cos(pos1.altitude);
-                        const d2 = compassRadius * Math.cos(pos2.altitude);
-                        const h1 = compassRadius * Math.sin(pos1.altitude);
-                        const h2 = compassRadius * Math.sin(pos2.altitude);
-
-                        const pt1 = turf.destination(centerPoint, d1, b1, { units: 'meters' });
-                        const pt2 = turf.destination(centerPoint, d2, b2, { units: 'meters' });
-
-                        const segment = turf.buffer(
-                            turf.lineString([pt1.geometry.coordinates, pt2.geometry.coordinates]),
-                            0.1, { units: 'meters' }
-                        );
-                        if (segment) {
-                            analysisFeatures.push({
-                                type: 'Feature',
-                                properties: {
-                                    type: 'celestial-arc',
-                                    color: bodyColor,
-                                    height: Math.max(h1, h2),
-                                    'base-height': Math.min(h1, h2)
-                                },
-                                geometry: segment.geometry
-                            });
-                        }
+                    if (pos.altitude > 0) {
+                        const bearing = (pos.azimuth * 180 / Math.PI) + 180;
+                        const d = compassRadius * Math.cos(pos.altitude);
+                        const h = compassRadius * Math.sin(pos.altitude);
+                        const pt = turf.destination(centerPoint, d, bearing, { units: 'meters' });
+                        arcPoints.push([pt.geometry.coordinates[0], pt.geometry.coordinates[1], h]);
                     }
+                }
+
+                if (arcPoints.length >= 2 && (window as any).tb) {
+                    const line = (window as any).tb.line({
+                        geometry: arcPoints,
+                        width: 3,
+                        color: bodyColor
+                    });
+                    (window as any).tb.add(line);
                 }
             }
 
-            // --- HTML Marker for current icon position (true 2D circle) ---
-            const map = mapRef.current;
-            if (map) {
+            // --- Billboard Icon for the current position ---
+            if ((window as any).tb) {
                 const iconTime = new Date(bodyDate);
                 iconTime.setHours(Math.floor(body.time), Math.round((body.time % 1) * 60), 0, 0);
 
@@ -690,24 +669,34 @@ const Map: React.FC<MapProps> = ({
                 if (iconPos.altitude > 0) {
                     const bearing = (iconPos.azimuth * 180 / Math.PI) + 180;
                     const d = compassRadius * Math.cos(iconPos.altitude);
+                    const h = compassRadius * Math.sin(iconPos.altitude);
                     const iconPt = turf.destination(centerPoint, d, bearing, { units: 'meters' });
                     const [iconLng, iconLat] = iconPt.geometry.coordinates as [number, number];
 
-                    const el = document.createElement('div');
-                    el.style.cssText = `
-                        width: 18px; height: 18px;
-                        border-radius: 50%;
-                        background: ${bodyColor};
-                        border: 2.5px solid rgba(255,255,255,0.8);
-                        box-shadow: 0 0 8px ${bodyColor};
-                        pointer-events: none;
-                    `;
+                    // Create canvas texture for billboard
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 64;
+                    canvas.height = 64;
+                    const context = canvas.getContext('2d');
+                    if (context) {
+                        context.beginPath();
+                        context.arc(32, 32, 28, 0, 2 * Math.PI, false);
+                        context.fillStyle = bodyColor;
+                        context.fill();
+                        context.lineWidth = 4;
+                        context.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                        context.stroke();
+                    }
+                    const texture = new THREE.CanvasTexture(canvas);
+                    const material = new THREE.SpriteMaterial({ map: texture, color: 0xffffff, depthTest: false });
+                    const sprite = new THREE.Sprite(material);
+                    
+                    const iconRadius = Math.max(10, compassRadius * 0.08);
+                    sprite.scale.set(iconRadius * 2, iconRadius * 2, 1);
 
-                    const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
-                        .setLngLat([iconLng, iconLat])
-                        .addTo(map);
-
-                    celestialMarkersRef.current.push(marker);
+                    const iconObj = (window as any).tb.Object3D({ obj: sprite, units: 'meters', anchor: 'center' })
+                        .setCoords([iconLng, iconLat, h]);
+                    (window as any).tb.add(iconObj);
                 }
             }
         });
@@ -757,6 +746,9 @@ const Map: React.FC<MapProps> = ({
         return;
       }
 
+      // Prevents adding new points while attempting to edit an existing one
+      if (editingPegIndex != null) return;
+
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat];
       setClicks(prev => {
         console.log('Previous clicks:', prev);
@@ -768,7 +760,7 @@ const Map: React.FC<MapProps> = ({
     };
     map.on('click', handleClick);
     return () => { map.off('click', handleClick); };
-  }, [mode]);
+  }, [mode, editingPegIndex]);
 
   return (
     <>

@@ -37,6 +37,10 @@ function App() {
   const [planName, setPlanName] = useState<string>('Unnamed Plan');
   const [zoomTrigger, setZoomTrigger] = useState(0); // Signal map to fly to site
 
+  // GPS Set Out States
+  const [editingPegIndex, setEditingPegIndex] = useState<number | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
+
   // Environmental Analysis States
   const [celestialBodies, setCelestialBodies] = useState<CelestialBody[]>([]);
   const [showWind, setShowWind] = useState<boolean>(false);
@@ -219,6 +223,7 @@ function App() {
     setPolygonResult(null);
     setClicks([]);
     setMode('none');
+    setEditingPegIndex(null);
     setPlanName('Unnamed Plan');
     setWindData(null);
     // Remove search markers and other map overlays
@@ -229,7 +234,40 @@ function App() {
 
   useEffect(() => {
     if (mode !== 'none') setShowAnalysisTooltip(false);
+    if (mode !== 'polygon') setEditingPegIndex(null);
   }, [mode]);
+
+  const handlePlacePeg = () => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+    
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setIsLocating(false);
+        const { longitude, latitude } = position.coords;
+        setClicks(prev => {
+          if (editingPegIndex !== null) {
+            const updated = [...prev];
+            updated[editingPegIndex] = [longitude, latitude];
+            setEditingPegIndex(null);
+            return updated;
+          } else {
+            return [...prev, [longitude, latitude]];
+          }
+        });
+        // Fly to the updated site bounds
+        setZoomTrigger(v => v + 1);
+      },
+      (error) => {
+        setIsLocating(false);
+        alert(`Failed to get location: ${error.message}`);
+      },
+      { enableHighAccuracy: true }
+    );
+  };
 
   useEffect(() => {
     if (polygonResult && polygonResult.vertices.length > 0) {
@@ -279,6 +317,36 @@ function App() {
         </div>
       </header>
 
+      {mode === 'polygon' && (
+        <div className="gps-set-out-panel">
+          {editingPegIndex !== null ? (
+            <div className="gps-edit-controls">
+              <button 
+                className="gps-place-btn is-editing" 
+                onClick={handlePlacePeg} 
+                disabled={isLocating}
+              >
+                {isLocating ? 'LOCATING...' : `UPDATE PEG ${editingPegIndex + 1} AT CURRENT LOCATION`}
+              </button>
+              <button 
+                className="gps-cancel-btn" 
+                onClick={() => setEditingPegIndex(null)}
+              >
+                ✖
+              </button>
+            </div>
+          ) : (
+            <button 
+              className="gps-place-btn" 
+              onClick={handlePlacePeg} 
+              disabled={isLocating}
+            >
+              {isLocating ? 'LOCATING...' : 'PLACE PEG'}
+            </button>
+          )}
+        </div>
+      )}
+
       <Toolbar
         currentMode={mode}
         setMode={setMode}
@@ -310,6 +378,8 @@ function App() {
         celestialBodies={celestialBodies}
         showWind={showWind}
         windData={windData}
+        editingPegIndex={editingPegIndex}
+        setEditingPegIndex={setEditingPegIndex}
       />
 
       <SidePanel
