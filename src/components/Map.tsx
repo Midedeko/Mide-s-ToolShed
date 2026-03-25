@@ -146,7 +146,7 @@ const Map: React.FC<MapProps> = ({
               { defaultLights: true }
             );
           },
-          render: function (gl: any, matrix: any) {
+          render: function (_gl: any, _matrix: any) {
             if ((window as any).tb) {
               (window as any).tb.update();
             }
